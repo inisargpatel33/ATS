@@ -124,6 +124,33 @@ def edit_room(room_id: int, room: RoomCreate):
         conn.close()
 
 # ==========================================
+# DELETE ROOM API
+# ==========================================
+@app.delete("/delete-room/{room_id}")
+def delete_room(room_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Note: If a room is already scheduled in a timetable, PostgreSQL might block this 
+        # delete if you have Foreign Key constraints. For now, this will delete the room.
+        cursor.execute("DELETE FROM rooms WHERE id = %s RETURNING id;", (room_id,))
+        
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Room not found")
+            
+        conn.commit()
+        return {"success": True, "message": "Room deleted successfully!"}
+        
+    except Exception as e:
+        print("--- DATABASE DELETE ERROR ---")
+        print(e)
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+# ==========================================
 # TIMETABLE API
 # ==========================================
 @app.post("/generate-timetable/{department_id}")

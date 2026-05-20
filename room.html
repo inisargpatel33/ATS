@@ -801,21 +801,36 @@
             </label>
           </div>
 
-          <div class="flex justify-end items-center gap-4 pt-4">
+          <div
+            class="flex justify-between items-center pt-4 mt-6 border-t border-surface-variant"
+          >
             <button
               type="button"
-              id="cancelEditModalBtn"
-              class="px-6 py-3 font-label-md text-primary hover:bg-surface-container-high rounded-lg transition-colors font-bold"
+              id="deleteRoomBtn"
+              class="px-4 py-2 font-label-md text-error hover:bg-error-container rounded-lg transition-colors font-bold flex items-center gap-2"
             >
-              Cancel
+              <span class="material-symbols-outlined text-[20px]">delete</span>
+              Delete
             </button>
-            <button
-              type="submit"
-              class="bg-primary text-on-primary font-label-md py-3 px-8 rounded-lg offset-shadow-sm active:scale-95 transition-all flex items-center gap-2"
-            >
-              <span class="material-symbols-outlined text-[20px]">update</span>
-              Update Room
-            </button>
+
+            <div class="flex items-center gap-4">
+              <button
+                type="button"
+                id="cancelEditModalBtn"
+                class="px-6 py-3 font-label-md text-primary hover:bg-surface-container-high rounded-lg transition-colors font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="bg-primary text-on-primary font-label-md py-3 px-8 rounded-lg offset-shadow-sm active:scale-95 transition-all flex items-center gap-2"
+              >
+                <span class="material-symbols-outlined text-[20px]"
+                  >update</span
+                >
+                Update
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -1035,6 +1050,49 @@
           }
         });
 
+        // --- 4. DELETE ROOM LOGIC ---
+        const deleteRoomBtn = document.getElementById("deleteRoomBtn");
+
+        deleteRoomBtn.addEventListener("click", async () => {
+          // 1. Safety Check: Ask the user to confirm
+          const roomName = globalRoomsData[currentlyEditingRoomId].name;
+          const isConfirmed = confirm(
+            `Are you absolutely sure you want to delete ${roomName}?\nThis action cannot be undone.`,
+          );
+
+          if (!isConfirmed) return; // Stop if they click cancel
+
+          // 2. UX: Change button to loading state
+          const originalBtnContent = deleteRoomBtn.innerHTML;
+          deleteRoomBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">sync</span> Deleting...`;
+          deleteRoomBtn.disabled = true;
+
+          try {
+            // 3. Send DELETE request to Python
+            const response = await fetch(
+              `${API_URL}/delete-room/${currentlyEditingRoomId}`,
+              {
+                method: "DELETE",
+              },
+            );
+
+            if (response.ok) {
+              await fetchRooms(); // Refresh the grid
+              closeEditModal(); // Close the popup
+            } else {
+              const res = await response.json();
+              alert("Error deleting room: " + (res.detail || res.message));
+            }
+          } catch (error) {
+            console.error("API Error:", error);
+            alert("Failed to connect to backend.");
+          } finally {
+            // 4. Reset button (in case it failed and stays open)
+            deleteRoomBtn.innerHTML = originalBtnContent;
+            deleteRoomBtn.disabled = false;
+          }
+        });
+
         // --- UI MODAL ANIMATIONS ---
         const closeAddModal = () => {
           addModal.classList.add("opacity-0");
@@ -1080,5 +1138,6 @@
         });
       });
     </script>
+    <!-- hi -->
   </body>
 </html>
