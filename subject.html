@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>SmartSched Uni - Subject Directory</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface": "#fdf8f8",
+                        "primary-fixed-dim": "#c8c6c6",
+                        "on-error-container": "#93000a",
+                        "outline": "#747878",
+                        "on-primary": "#ffffff",
+                        "on-surface-variant": "#444748",
+                        "tertiary-fixed": "#d8e8c7",
+                        "on-secondary-fixed": "#001e2c",
+                        "surface-variant": "#e5e2e1",
+                        "on-primary-container": "#959494",
+                        "primary-fixed": "#e4e2e1",
+                        "on-secondary": "#ffffff",
+                        "surface-container-high": "#ebe7e7",
+                        "on-tertiary-fixed": "#131f0b",
+                        "outline-variant": "#c4c7c7",
+                        "secondary": "#456273",
+                        "on-secondary-fixed-variant": "#2d4a5a",
+                        "inverse-primary": "#c8c6c6",
+                        "on-surface": "#1c1b1b",
+                        "primary": "#181919",
+                        "secondary-container": "#c8e7fb",
+                        "error": "#ba1a1a",
+                        "tertiary": "#101c08",
+                        "on-tertiary": "#ffffff",
+                        "surface-container": "#f1edec",
+                        "surface-container-highest": "#e5e2e1",
+                        "background": "#fdf8f8",
+                        "inverse-surface": "#313030",
+                        "on-primary-fixed-variant": "#474747",
+                        "secondary-fixed": "#c8e7fb",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#24311b",
+                        "on-background": "#1c1b1b",
+                        "on-error": "#ffffff",
+                        "surface-tint": "#5f5e5e",
+                        "inverse-on-surface": "#f4f0ef",
+                        "primary-container": "#2d2d2d",
+                        "surface-container-low": "#f7f3f2",
+                        "surface-dim": "#ddd9d8",
+                        "on-primary-fixed": "#1b1c1c",
+                        "surface-bright": "#fdf8f8",
+                        "tertiary-fixed-dim": "#bcccac",
+                        "on-tertiary-container": "#8a9a7d",
+                        "on-secondary-container": "#4b6879",
+                        "on-tertiary-fixed-variant": "#3d4b33",
+                        "secondary-fixed-dim": "#adcbde",
+                        "error-container": "#ffdad6"
+                    },
+                    fontFamily: {
+                        "headline-md": ["Bricolage Grotesque"],
+                        "headline-lg": ["Bricolage Grotesque"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "display-lg": ["Bricolage Grotesque"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "label-sm": ["Plus Jakarta Sans"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+        }
+        
+        .hand-drawn-border-sm {
+            border: 2px solid #181919;
+            border-radius: 12px 4px 14px 5px/4px 12px 5px 14px;
+        }
+
+        .offset-shadow-sm {
+            box-shadow: 4px 4px 0px 0px rgba(24, 25, 25, 1);
+        }
+        
+        ::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1edec; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #181919; 
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-surface text-primary font-body-md overflow-x-hidden">
+
+    <aside class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 border-r-2 border-primary bg-surface py-6 gap-2 z-40 shadow-[6px_0px_0px_0px_rgba(24,25,25,0.05)]">
+        <div class="px-6 mb-8">
+            <h1 class="font-headline-md text-2xl text-primary">Admin Portal</h1>
+            <p class="font-label-sm text-on-surface-variant">Academic Year 2024-25</p>
+        </div>
+        <nav class="flex-1 flex flex-col gap-1 overflow-y-auto">
+            <a href="#" class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95">
+                <span class="material-symbols-outlined">dashboard</span>
+                <span class="font-label-md">Dashboard</span>
+            </a>
+            <a href="#" class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95">
+                <span class="material-symbols-outlined">school</span>
+                <span class="font-label-md">Faculty</span>
+            </a>
+            <a href="#" class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95">
+                <span class="material-symbols-outlined">meeting_room</span>
+                <span class="font-label-md">Rooms</span>
+            </a>
+            <a href="#" class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95">
+                <span class="material-symbols-outlined">groups</span>
+                <span class="font-label-md">Batches</span>
+            </a>
+            <a href="#" class="bg-secondary-container text-on-secondary-container border-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,1)] rounded-lg mx-2 my-1 px-4 py-3 flex items-center gap-3 active:scale-95 transition-transform">
+                <span class="material-symbols-outlined">menu_book</span>
+                <span class="font-label-md">Subjects</span>
+            </a>
+            <a href="#" class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95">
+                <span class="material-symbols-outlined">auto_awesome</span>
+                <span class="font-label-md">Scheduler</span>
+            </a>
+            <a href="#" class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95">
+                <span class="material-symbols-outlined">calendar_month</span>
+                <span class="font-label-md">Timetables</span>
+            </a>
+        </nav>
+        <div class="px-4 mt-auto flex flex-col gap-2">
+            <button class="bg-primary text-on-primary font-label-md py-3 px-4 rounded-lg shadow-[4px_4px_0px_0px_rgba(24,25,25,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined">add</span>
+                New Schedule
+            </button>
+            <div class="pt-4 border-t border-outline-variant">
+                <a href="#" class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-2 rounded-lg transition-all">
+                    <span class="material-symbols-outlined">help_outline</span>
+                    <span class="font-label-md">Help Center</span>
+                </a>
+                <a href="#" class="text-error hover:opacity-80 flex items-center gap-3 px-4 py-2 rounded-lg transition-all">
+                    <span class="material-symbols-outlined">logout</span>
+                    <span class="font-label-md">Logout</span>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <main class="md:ml-64 min-h-screen pb-24 md:pb-8">
+        
+        <header class="sticky top-0 z-50 bg-surface flex justify-between items-center w-full px-4 md:px-8 py-4 border-b-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,0.1)]">
+            <div class="flex items-center gap-4">
+                <span class="font-headline-lg text-2xl md:text-3xl text-primary tracking-tight">SmartSched Uni</span>
+            </div>
+            <div class="flex items-center gap-4 md:gap-6">
+                <div class="hidden lg:flex items-center bg-surface-container border-2 border-primary rounded-full px-4 py-1 gap-2">
+                    <span class="material-symbols-outlined text-on-surface-variant">search</span>
+                    <input type="text" placeholder="Search data..." class="bg-transparent border-none focus:ring-0 text-body-md w-64"/>
+                </div>
+                <div class="flex items-center gap-2 md:gap-3">
+                    <button class="p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95">
+                        <span class="material-symbols-outlined">notifications</span>
+                    </button>
+                    <button class="hidden md:block p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95">
+                        <span class="material-symbols-outlined">settings</span>
+                    </button>
+                    <div class="w-10 h-10 rounded-full border-2 border-primary overflow-hidden ml-2">
+                        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIihBiOgnYkUCH03Bw9UFPY7YedbFkA5TYsAZaGaQOzh5WpJ6mtRMDDIIy_Jg4KeqZGmafU5LdHFiTzZX2o8DfHmK1-EssTLSObigWJjyn1VqAMeEsuyjhXoSvW8T8GZdAR5NOBexLe9rcJeqNRLbYagTV6UYoZJ3ubusVmyZd1Gb5QxrI_vt58MmsQTeagOEnEzZ-Sl9cCgWLuIqLvuzjI9hS5ReU1eJejg3ks9mlb1eYvRAmK_ZEk-1teNtLAehJ7DnfbqpL1nxH" alt="User Profile" class="w-full h-full object-cover"/>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="p-4 md:p-8 lg:p-10 max-w-[1400px] mx-auto">
+            
+            <section class="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-8">
+                <div class="p-3 bg-white hand-drawn-border-sm offset-shadow-sm flex items-center justify-center shrink-0">
+                    <img alt="Book Icon" class="w-12 h-12 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3Uh3cmAbPmKW_BrZoZ44R8SMPFvnw8QubHMxxQtj2ESC7Zg_B7eOm-H5Y6R6yYTbUo2M8Ehyv9W6yvvSWwm4MBV7QEEF4IZZn-9_g0AGWjk9PJKjSyGnr4Tx9h3CE11AqTLGVVqVUV2VteGMb6U2UziyN-GU2MwedbzaEYVnGVrdvLIh82moiGvDnUG62ThTA_J2LBjy92ZaeBHl5Z0_-xqcXanylC_YYdV2vLsZ52sNunycntnbKaEn_i_CbdK6cUc5qaN9f_SpO"/>
+                </div>
+                <div>
+                    <h2 class="font-display-lg text-3xl md:text-4xl text-primary">Subject Directory</h2>
+                    <p class="font-body-md text-on-surface-variant mt-1">Manage course codes, credits, and departmental allocations.</p>
+                </div>
+            </section>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
+                
+                <section class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 lg:col-span-4 h-fit">
+                    <h3 class="font-headline-md text-2xl text-primary mb-6 flex items-center gap-2">
+                        <span class="material-symbols-outlined">add_circle</span> Add Subject
+                    </h3>
+                    
+                    <form class="space-y-5">
+                        <div class="flex flex-col space-y-2">
+                            <label class="font-label-md text-primary">Subject Code</label>
+                            <input type="text" placeholder="e.g. MCA-201" class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-0"/>
+                        </div>
+                        
+                        <div class="flex flex-col space-y-2">
+                            <label class="font-label-md text-primary">Subject Name</label>
+                            <input type="text" placeholder="e.g. Operations Research" class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-0"/>
+                        </div>
+                        
+                        <div class="flex flex-col space-y-2">
+                            <label class="font-label-md text-primary">Credits / Weekly Hours</label>
+                            <input type="number" placeholder="4" min="1" max="10" class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-0"/>
+                        </div>
+                        
+                        <div class="flex flex-col space-y-2">
+                            <label class="font-label-md text-primary">Department</label>
+                            <div class="relative">
+                                <select class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10">
+                                    <option disabled selected>Select Department</option>
+                                    <option>Computer Applications</option>
+                                    <option>Computer Science</option>
+                                    <option>Mathematics</option>
+                                    <option>Physics</option>
+                                    <option>English</option>
+                                </select>
+                                <span class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant">expand_more</span>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col space-y-2">
+                            <label class="font-label-md text-primary">Room Requirements</label>
+                            <div class="relative">
+                                <select class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10">
+                                    <option>Standard Classroom</option>
+                                    <option>Computer Lab</option>
+                                    <option>Physics Lab</option>
+                                </select>
+                                <span class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant">expand_more</span>
+                            </div>
+                        </div>
+
+                        <div class="pt-4">
+                            <button type="button" class="w-full bg-primary text-on-primary font-label-md py-3 px-4 rounded-lg shadow-[4px_4px_0px_0px_rgba(24,25,25,0.3)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2">
+                                <span class="material-symbols-outlined">save</span>
+                                Save Subject
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="bg-white hand-drawn-border-sm offset-shadow-sm p-4 md:p-8 w-full overflow-hidden lg:col-span-8 flex flex-col h-full">
+                    
+                    <div class="max-w-sm mb-6 md:mb-8">
+                        <div class="relative bg-surface border-2 border-primary rounded-full flex items-center px-3 py-1">
+                            <span class="material-symbols-outlined text-on-surface-variant">search</span>
+                            <input type="text" placeholder="Search subjects..." class="w-full bg-transparent border-none focus:ring-0 text-body-md px-3 py-1.5"/>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto flex-grow">
+                        <table class="w-full text-left min-w-[600px]">
+                            <thead>
+                                <tr class="border-b-2 border-primary">
+                                    <th class="pb-4 pt-2 px-4 font-label-md text-primary">Code</th>
+                                    <th class="pb-4 pt-2 px-4 font-label-md text-primary">Name</th>
+                                    <th class="pb-4 pt-2 px-4 font-label-md text-primary text-center">Credits</th>
+                                    <th class="pb-4 pt-2 px-4 font-label-md text-primary">Department</th>
+                                    <th class="pb-4 pt-2 px-4 font-label-md text-primary text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-surface-variant">
+                                <tr class="hover:bg-surface-container-lowest transition-colors">
+                                    <td class="py-4 px-4 font-label-md text-primary">CSE101</td>
+                                    <td class="py-4 px-4 text-on-surface-variant font-medium">Intro to Computer Science</td>
+                                    <td class="py-4 px-4 text-on-surface-variant text-center">4</td>
+                                    <td class="py-4 px-4 text-on-surface-variant">Computer Science</td>
+                                    <td class="py-4 px-4 text-center">
+                                        <button class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-surface-container-lowest transition-colors">
+                                    <td class="py-4 px-4 font-label-md text-primary">ENG202</td>
+                                    <td class="py-4 px-4 text-on-surface-variant font-medium">American Literature</td>
+                                    <td class="py-4 px-4 text-on-surface-variant text-center">3</td>
+                                    <td class="py-4 px-4 text-on-surface-variant">English</td>
+                                    <td class="py-4 px-4 text-center">
+                                        <button class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-surface-container-lowest transition-colors">
+                                    <td class="py-4 px-4 font-label-md text-primary">MAT105</td>
+                                    <td class="py-4 px-4 text-on-surface-variant font-medium">Calculus I</td>
+                                    <td class="py-4 px-4 text-on-surface-variant text-center">5</td>
+                                    <td class="py-4 px-4 text-on-surface-variant">Mathematics</td>
+                                    <td class="py-4 px-4 text-center">
+                                        <button class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-surface-container-lowest transition-colors">
+                                    <td class="py-4 px-4 font-label-md text-primary">MAT106</td>
+                                    <td class="py-4 px-4 text-on-surface-variant font-medium">Calculus III</td>
+                                    <td class="py-4 px-4 text-on-surface-variant text-center">5</td>
+                                    <td class="py-4 px-4 text-on-surface-variant">Mathematics</td>
+                                    <td class="py-4 px-4 text-center">
+                                        <button class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-surface-container-lowest transition-colors">
+                                    <td class="py-4 px-4 font-label-md text-primary">PHY110</td>
+                                    <td class="py-4 px-4 text-on-surface-variant font-medium">General Physics I</td>
+                                    <td class="py-4 px-4 text-on-surface-variant text-center">4</td>
+                                    <td class="py-4 px-4 text-on-surface-variant">Physics</td>
+                                    <td class="py-4 px-4 text-center">
+                                        <button class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-surface-container-lowest transition-colors">
+                                    <td class="py-4 px-4 font-label-md text-primary">MCA201</td>
+                                    <td class="py-4 px-4 text-on-surface-variant font-medium">Operations Research</td>
+                                    <td class="py-4 px-4 text-on-surface-variant text-center">4</td>
+                                    <td class="py-4 px-4 text-on-surface-variant">Computer Applications</td>
+                                    <td class="py-4 px-4 text-center">
+                                        <button class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </main>
+
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t-2 border-primary px-2 py-3 flex justify-around items-center z-50 shadow-[0px_-4px_10px_rgba(0,0,0,0.05)]">
+        <a href="#" class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors">
+            <span class="material-symbols-outlined">dashboard</span>
+            <span class="font-label-sm text-[10px]">Home</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-primary font-bold">
+            <span class="material-symbols-outlined">menu_book</span>
+            <span class="font-label-sm text-[10px]">Subjects</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-on-surface-variant relative -top-5">
+            <div class="bg-primary text-on-primary p-3 md:p-4 rounded-full border-2 border-surface shadow-[0_4px_0_0_#181919] hover:-translate-y-1 transition-transform">
+                <span class="material-symbols-outlined text-xl">add</span>
+            </div>
+            <span class="font-label-sm text-[10px] absolute -bottom-4 text-primary font-bold">Create</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors">
+            <span class="material-symbols-outlined">school</span>
+            <span class="font-label-sm text-[10px]">Staff</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors">
+            <span class="material-symbols-outlined">settings</span>
+            <span class="font-label-sm text-[10px]">Admin</span>
+        </a>
+    </nav>
+    
+</body>
+</html>
