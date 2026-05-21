@@ -175,84 +175,18 @@
           <span class="material-symbols-outlined">auto_awesome</span>
           <span class="font-label-md">Scheduler</span>
         </a>
-        <a
-          href="timetable.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
-        >
-          <span class="material-symbols-outlined">calendar_month</span>
-          <span class="font-label-md">Timetables</span>
-        </a>
       </nav>
-      <div class="px-4 mt-auto flex flex-col gap-2">
-        <button
-          class="bg-primary text-on-primary font-label-md py-3 px-4 rounded-lg shadow-[4px_4px_0px_0px_rgba(24,25,25,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2"
-        >
-          <span class="material-symbols-outlined">add</span>
-          New Schedule
-        </button>
-        <div class="pt-4 border-t border-outline-variant">
-          <a
-            href="#"
-            class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-2 rounded-lg transition-all"
-          >
-            <span class="material-symbols-outlined">help_outline</span>
-            <span class="font-label-md">Help Center</span>
-          </a>
-          <a
-            href="#"
-            class="text-error hover:opacity-80 flex items-center gap-3 px-4 py-2 rounded-lg transition-all"
-          >
-            <span class="material-symbols-outlined">logout</span>
-            <span class="font-label-md">Logout</span>
-          </a>
-        </div>
-      </div>
     </aside>
 
     <main class="md:ml-64 min-h-screen pb-24 md:pb-8">
       <header
-        class="sticky top-0 z-50 bg-surface flex justify-between items-center w-full px-4 md:px-8 py-4 border-b-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,0.1)]"
+        class="sticky top-0 z-40 bg-surface flex justify-between items-center w-full px-4 md:px-8 py-4 border-b-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,0.1)]"
       >
         <div class="flex items-center gap-4">
           <span
             class="font-headline-lg text-2xl md:text-3xl text-primary tracking-tight"
             >SmartSched Uni</span
           >
-        </div>
-        <div class="flex items-center gap-4 md:gap-6">
-          <div
-            class="hidden lg:flex items-center bg-surface-container border-2 border-primary rounded-full px-4 py-1 gap-2"
-          >
-            <span class="material-symbols-outlined text-on-surface-variant"
-              >search</span
-            >
-            <input
-              type="text"
-              placeholder="Search data..."
-              class="bg-transparent border-none focus:ring-0 text-body-md w-64"
-            />
-          </div>
-          <div class="flex items-center gap-2 md:gap-3">
-            <button
-              class="p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95"
-            >
-              <span class="material-symbols-outlined">notifications</span>
-            </button>
-            <button
-              class="hidden md:block p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95"
-            >
-              <span class="material-symbols-outlined">settings</span>
-            </button>
-            <div
-              class="w-10 h-10 rounded-full border-2 border-primary overflow-hidden ml-2"
-            >
-              <img
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIihBiOgnYkUCH03Bw9UFPY7YedbFkA5TYsAZaGaQOzh5WpJ6mtRMDDIIy_Jg4KeqZGmafU5LdHFiTzZX2o8DfHmK1-EssTLSObigWJjyn1VqAMeEsuyjhXoSvW8T8GZdAR5NOBexLe9rcJeqNRLbYagTV6UYoZJ3ubusVmyZd1Gb5QxrI_vt58MmsQTeagOEnEzZ-Sl9cCgWLuIqLvuzjI9hS5ReU1eJejg3ks9mlb1eYvRAmK_ZEk-1teNtLAehJ7DnfbqpL1nxH"
-                alt="User Profile"
-                class="w-full h-full object-cover"
-              />
-            </div>
-          </div>
         </div>
       </header>
 
@@ -263,22 +197,28 @@
           <div
             class="p-3 bg-white hand-drawn-border-sm offset-shadow-sm flex items-center justify-center shrink-0"
           >
-            <img
-              alt="Book Icon"
-              class="w-12 h-12 object-contain -rotate-45 w-9/12"
-              src="https://i.ibb.co/35tGTwhr/library-5536931-1280-removebg-preview.png"
-            />
+            <span class="material-symbols-outlined text-4xl text-primary"
+              >apartment</span
+            >
           </div>
           <div>
             <h2 class="font-display-lg text-3xl md:text-4xl text-primary">
               Department Management
             </h2>
             <p class="font-body-md text-on-surface-variant mt-1">
-              Add new departments or edit existing ones to keep your academic
-              structure organized and up-to-date.
+              Add new departments to organize your batches, faculties, and
+              rooms.
             </p>
           </div>
         </section>
+
+        <!-- Message Banner for Alerts -->
+        <div
+          id="alertBanner"
+          class="hidden w-full mb-6 p-4 border-2 rounded-lg font-label-md transition-all"
+        >
+          <span id="alertMessage"></span>
+        </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
           <section
@@ -291,84 +231,25 @@
               Department
             </h3>
 
-            <form class="space-y-5">
-              <!-- <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary"
-                  >Department Code</label
+            <!-- Inside your <section> that contains the form -->
+            <form id="newDeptForm" class="space-y-5">
+              <div class="flex flex-col space-y-2">
+                <label class="font-label-md text-primary font-bold"
+                  >Department Name <span class="text-error">*</span></label
                 >
                 <input
                   type="text"
-                  placeholder="e.g. MCA-201"
-                  class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-0"
+                  id="deptName"
+                  required
+                  placeholder="e.g. Computer Science"
+                  class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container"
                 />
-              </div> -->
-
-              <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary"
-                  >Department Name</label
-                >
-                <input
-                  type="text"
-                  placeholder="e.g. Operations Research"
-                  class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-0"
-                />
-              </div>
-
-              <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary"
-                  >Credits / Weekly Hours</label
-                >
-                <input
-                  type="number"
-                  placeholder="4"
-                  min="1"
-                  max="10"
-                  class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-0"
-                />
-              </div>
-
-              <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary">Department</label>
-                <div class="relative">
-                  <select
-                    class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
-                  >
-                    <option disabled selected>Select Department</option>
-                    <option>Computer Applications</option>
-                    <option>Computer Science</option>
-                    <option>Mathematics</option>
-                    <option>Physics</option>
-                    <option>English</option>
-                  </select>
-                  <span
-                    class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                    >expand_more</span
-                  >
-                </div>
-              </div>
-
-              <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary"
-                  >Room Requirements</label
-                >
-                <div class="relative">
-                  <select
-                    class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
-                  >
-                    <option>Standard Classroom</option>
-                    <option>Computer Lab</option>
-                    <option>Physics Lab</option>
-                  </select>
-                  <span
-                    class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                    >expand_more</span
-                  >
-                </div>
               </div>
 
               <div class="pt-4">
                 <button
-                  type="button"
+                  type="submit"
+                  id="saveDeptBtn"
                   class="w-full bg-primary text-on-primary font-label-md py-3 px-4 rounded-lg shadow-[4px_4px_0px_0px_rgba(24,25,25,0.3)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
                 >
                   <span class="material-symbols-outlined">save</span>
@@ -376,6 +257,9 @@
                 </button>
               </div>
             </form>
+
+            <!-- Add this for error/success messages -->
+            <div id="statusMessage" class="mt-4 font-label-md hidden"></div>
           </section>
 
           <section
@@ -390,172 +274,34 @@
                 >
                 <input
                   type="text"
-                  placeholder="Search subjects..."
+                  placeholder="Search departments..."
                   class="w-full bg-transparent border-none focus:ring-0 text-body-md px-3 py-1.5"
                 />
               </div>
             </div>
 
             <div class="overflow-x-auto flex-grow">
-              <table class="w-full text-left min-w-[600px]">
+              <table class="w-full text-left min-w-[500px]">
                 <thead>
                   <tr class="border-b-2 border-primary">
-                    <th class="pb-4 pt-2 px-4 font-label-md text-primary">
-                      Code
+                    <th class="pb-4 pt-2 px-4 font-label-md text-primary w-24">
+                      ID
                     </th>
                     <th class="pb-4 pt-2 px-4 font-label-md text-primary">
-                      Name
+                      Department Name
                     </th>
                     <th
-                      class="pb-4 pt-2 px-4 font-label-md text-primary text-center"
-                    >
-                      Credits
-                    </th>
-                    <th class="pb-4 pt-2 px-4 font-label-md text-primary">
-                      Department
-                    </th>
-                    <th
-                      class="pb-4 pt-2 px-4 font-label-md text-primary text-center"
+                      class="pb-4 pt-2 px-4 font-label-md text-primary text-center w-32"
                     >
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-surface-variant">
-                  <tr
-                    class="hover:bg-surface-container-lowest transition-colors"
-                  >
-                    <td class="py-4 px-4 font-label-md text-primary">CSE101</td>
-                    <td class="py-4 px-4 text-on-surface-variant font-medium">
-                      Intro to Computer Science
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant text-center">
-                      4
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant">
-                      Computer Science
-                    </td>
-                    <td class="py-4 px-4 text-center">
-                      <button
-                        class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                    </td>
-                  </tr>
-                  <tr
-                    class="hover:bg-surface-container-lowest transition-colors"
-                  >
-                    <td class="py-4 px-4 font-label-md text-primary">ENG202</td>
-                    <td class="py-4 px-4 text-on-surface-variant font-medium">
-                      American Literature
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant text-center">
-                      3
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant">English</td>
-                    <td class="py-4 px-4 text-center">
-                      <button
-                        class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                    </td>
-                  </tr>
-                  <tr
-                    class="hover:bg-surface-container-lowest transition-colors"
-                  >
-                    <td class="py-4 px-4 font-label-md text-primary">MAT105</td>
-                    <td class="py-4 px-4 text-on-surface-variant font-medium">
-                      Calculus I
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant text-center">
-                      5
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant">
-                      Mathematics
-                    </td>
-                    <td class="py-4 px-4 text-center">
-                      <button
-                        class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                    </td>
-                  </tr>
-                  <tr
-                    class="hover:bg-surface-container-lowest transition-colors"
-                  >
-                    <td class="py-4 px-4 font-label-md text-primary">MAT106</td>
-                    <td class="py-4 px-4 text-on-surface-variant font-medium">
-                      Calculus III
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant text-center">
-                      5
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant">
-                      Mathematics
-                    </td>
-                    <td class="py-4 px-4 text-center">
-                      <button
-                        class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                    </td>
-                  </tr>
-                  <tr
-                    class="hover:bg-surface-container-lowest transition-colors"
-                  >
-                    <td class="py-4 px-4 font-label-md text-primary">PHY110</td>
-                    <td class="py-4 px-4 text-on-surface-variant font-medium">
-                      General Physics I
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant text-center">
-                      4
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant">Physics</td>
-                    <td class="py-4 px-4 text-center">
-                      <button
-                        class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                    </td>
-                  </tr>
-                  <tr
-                    class="hover:bg-surface-container-lowest transition-colors"
-                  >
-                    <td class="py-4 px-4 font-label-md text-primary">MCA201</td>
-                    <td class="py-4 px-4 text-on-surface-variant font-medium">
-                      Operations Research
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant text-center">
-                      4
-                    </td>
-                    <td class="py-4 px-4 text-on-surface-variant">
-                      Computer Applications
-                    </td>
-                    <td class="py-4 px-4 text-center">
-                      <button
-                        class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                    </td>
-                  </tr>
+                <tbody
+                  id="deptTableBody"
+                  class="divide-y divide-surface-variant"
+                >
+                  <!-- Javascript will populate this -->
                 </tbody>
               </table>
             </div>
@@ -564,51 +310,159 @@
       </div>
     </main>
 
-    <nav
-      class="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t-2 border-primary px-2 py-3 flex justify-around items-center z-50 shadow-[0px_-4px_10px_rgba(0,0,0,0.05)]"
+    <!-- Edit Department Modal -->
+    <div
+      id="editDeptModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm opacity-0 hidden transition-opacity duration-300"
     >
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
+      <div
+        id="editDeptModalContent"
+        class="bg-surface w-[90%] max-w-md hand-drawn-border-sm offset-shadow-sm p-6 md:p-8 transform scale-95 transition-transform duration-300"
       >
-        <span class="material-symbols-outlined">dashboard</span>
-        <span class="font-label-sm text-[10px]">Home</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-primary font-bold"
-      >
-        <span class="material-symbols-outlined">menu_book</span>
-        <span class="font-label-sm text-[10px]">Subjects</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant relative -top-5"
-      >
-        <div
-          class="bg-primary text-on-primary p-3 md:p-4 rounded-full border-2 border-surface shadow-[0_4px_0_0_#181919] hover:-translate-y-1 transition-transform"
-        >
-          <span class="material-symbols-outlined text-xl">add</span>
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-headline-md text-2xl text-primary">
+            Edit Department
+          </h3>
+          <button
+            id="closeEditModalBtn"
+            type="button"
+            class="text-on-surface-variant hover:text-error transition-colors p-1"
+          >
+            <span class="material-symbols-outlined text-3xl">close</span>
+          </button>
         </div>
-        <span
-          class="font-label-sm text-[10px] absolute -bottom-4 text-primary font-bold"
-          >Create</span
-        >
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
-      >
-        <span class="material-symbols-outlined">school</span>
-        <span class="font-label-sm text-[10px]">Staff</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
-      >
-        <span class="material-symbols-outlined">settings</span>
-        <span class="font-label-sm text-[10px]">Admin</span>
-      </a>
-    </nav>
+
+        <form id="editDeptForm" class="space-y-6">
+          <div class="flex flex-col gap-2">
+            <label class="font-label-md text-primary font-bold"
+              >Department Name <span class="text-error">*</span></label
+            >
+            <input
+              type="text"
+              id="editDeptName"
+              required
+              class="bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-secondary-container transition-shadow font-body-md w-full"
+            />
+          </div>
+
+          <div
+            class="flex justify-between items-center pt-4 mt-6 border-t border-surface-variant"
+          >
+            <button
+              type="button"
+              id="deleteDeptBtn"
+              class="px-4 py-2 font-label-md text-error hover:bg-error-container rounded-lg transition-colors font-bold flex items-center gap-2"
+            >
+              <span class="material-symbols-outlined text-[20px]">delete</span>
+              Delete
+            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                id="cancelEditModalBtn"
+                class="px-4 py-2 font-label-md text-primary hover:bg-surface-container-high rounded-lg transition-colors font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="bg-primary text-on-primary font-label-md py-2 px-6 rounded-lg offset-shadow-sm active:scale-95 transition-all flex items-center gap-2"
+              >
+                Update
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Frontend Logic for Fetch, Add, Edit, Delete -->
+    <script>
+      const API_URL = "http://127.0.0.1:8000";
+      const newDeptForm = document.getElementById("newDeptForm");
+      const deptTableBody = document.getElementById("deptTableBody");
+      const statusMessage = document.getElementById("statusMessage");
+
+      // 1. Fetch & Render Table
+      async function loadDepartments() {
+        try {
+          const response = await fetch(`${API_URL}/get-departments/`);
+          const result = await response.json();
+          deptTableBody.innerHTML = "";
+
+          result.data.forEach((dept) => {
+            deptTableBody.innerHTML += `
+          <tr class="hover:bg-surface-container-lowest">
+            <td class="py-4 px-4 font-label-md text-primary">${dept.id}</td>
+            <td class="py-4 px-4 text-on-surface-variant font-medium">${dept.name}</td>
+            <td class="py-4 px-4 text-center">
+              <button onclick="deleteDept(${dept.id})" class="text-error hover:bg-error-container p-1.5 rounded-md transition-colors">
+                <span class="material-symbols-outlined text-[20px]">delete</span>
+              </button>
+            </td>
+          </tr>
+        `;
+          });
+        } catch (err) {
+          console.error("Failed to load data");
+        }
+      }
+
+      // 2. Add Department
+      newDeptForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const deptName = document.getElementById("deptName").value;
+        const saveBtn = document.getElementById("saveDeptBtn");
+
+        saveBtn.disabled = true;
+        saveBtn.innerText = "Saving...";
+        statusMessage.classList.add("hidden");
+
+        try {
+          const response = await fetch(`${API_URL}/add-department/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: deptName }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            statusMessage.className =
+              "mt-4 font-label-md text-tertiary-container";
+            statusMessage.innerText = "✅ Added successfully!";
+            newDeptForm.reset();
+            loadDepartments(); // Refresh table
+          } else {
+            statusMessage.className = "mt-4 font-label-md text-error";
+            statusMessage.innerText =
+              response.status === 400
+                ? "⚠️ Already exists."
+                : "❌ " + result.detail;
+          }
+        } catch (err) {
+          statusMessage.innerText = "❌ Server offline.";
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML =
+            '<span class="material-symbols-outlined">save</span> Save Department';
+          statusMessage.classList.remove("hidden");
+        }
+      });
+
+      // 3. Delete Department
+      async function deleteDept(id) {
+        if (!confirm("Delete this? This will remove all linked data.")) return;
+
+        const response = await fetch(`${API_URL}/delete-department/${id}`, {
+          method: "DELETE",
+        });
+        if (response.ok) loadDepartments();
+        else alert("Cannot delete (records might be linked).");
+      }
+
+      // Init on load
+      document.addEventListener("DOMContentLoaded", loadDepartments);
+    </script>
   </body>
 </html>

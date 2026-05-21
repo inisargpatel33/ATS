@@ -101,7 +101,6 @@
         box-shadow: 4px 4px 0px 0px rgba(24, 25, 25, 1);
       }
 
-      /* Custom scrollbar for data tables to match aesthetics */
       ::-webkit-scrollbar {
         height: 8px;
         width: 8px;
@@ -129,7 +128,7 @@
       <nav class="flex-1 flex flex-col gap-1 overflow-y-auto">
         <a
           href="index.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
         >
           <span class="material-symbols-outlined">dashboard</span>
           <span class="font-label-md">Dashboard</span>
@@ -143,78 +142,45 @@
         </a>
         <a
           href="room.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
         >
           <span class="material-symbols-outlined">meeting_room</span>
           <span class="font-label-md">Rooms</span>
         </a>
         <a
           href="batch.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
         >
           <span class="material-symbols-outlined">groups</span>
           <span class="font-label-md">Batches</span>
         </a>
-
         <a
           href="dept.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
         >
           <span class="material-symbols-outlined">apartment</span>
           <span class="font-label-md">Department</span>
         </a>
-
         <a
           href="subject.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
         >
           <span class="material-symbols-outlined">menu_book</span>
           <span class="font-label-md">Subjects</span>
         </a>
         <a
           href="scheduler.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
         >
           <span class="material-symbols-outlined">auto_awesome</span>
           <span class="font-label-md">Scheduler</span>
         </a>
-        <a
-          href="timetable.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
-        >
-          <span class="material-symbols-outlined">calendar_month</span>
-          <span class="font-label-md">Timetables</span>
-        </a>
       </nav>
-      <div class="px-4 mt-auto flex flex-col gap-2">
-        <button
-          class="bg-primary text-on-primary font-label-md py-3 px-4 rounded-lg shadow-[4px_4px_0px_0px_rgba(24,25,25,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2"
-        >
-          <span class="material-symbols-outlined">add</span>
-          New Schedule
-        </button>
-        <div class="pt-4 border-t border-outline-variant">
-          <a
-            href="#"
-            class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-2 rounded-lg transition-all"
-          >
-            <span class="material-symbols-outlined">help_outline</span>
-            <span class="font-label-md">Help Center</span>
-          </a>
-          <a
-            href="#"
-            class="text-error hover:opacity-80 flex items-center gap-3 px-4 py-2 rounded-lg transition-all"
-          >
-            <span class="material-symbols-outlined">logout</span>
-            <span class="font-label-md">Logout</span>
-          </a>
-        </div>
-      </div>
     </aside>
 
     <main class="md:ml-64 min-h-screen pb-24 md:pb-8">
       <header
-        class="sticky top-0 z-50 bg-surface flex justify-between items-center w-full px-4 md:px-8 py-4 border-b-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,0.1)]"
+        class="sticky top-0 z-40 bg-surface flex justify-between items-center w-full px-4 md:px-8 py-4 border-b-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,0.1)]"
       >
         <div class="flex items-center gap-4">
           <span
@@ -222,59 +188,25 @@
             >SmartSched Uni</span
           >
         </div>
-        <div class="flex items-center gap-4 md:gap-6">
-          <div
-            class="hidden lg:flex items-center bg-surface-container border-2 border-primary rounded-full px-4 py-1 gap-2"
-          >
-            <span class="material-symbols-outlined text-on-surface-variant"
-              >search</span
-            >
-            <input
-              type="text"
-              placeholder="Search data..."
-              class="bg-transparent border-none focus:ring-0 text-body-md w-64"
-            />
-          </div>
-          <div class="flex items-center gap-2 md:gap-3">
-            <button
-              class="p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95"
-            >
-              <span class="material-symbols-outlined">notifications</span>
-            </button>
-            <button
-              class="hidden md:block p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95"
-            >
-              <span class="material-symbols-outlined">settings</span>
-            </button>
-            <div
-              class="w-10 h-10 rounded-full border-2 border-primary overflow-hidden ml-2"
-            >
-              <img
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-WbwvC6VOUuBy91_V01JFHRp1OwDpCo2ziuU6gXlf26OIDDK5LTppyi1Nna3QDaUC6QSUI4xks95ngo9YBBmOsinyiw0Ti7IJAGPZ2__-HPIKs38lUU4fSyyYt3q3OoXo5XJi0Fn4DE0-OrRFPTvmrUYnDDzmUu257i8mDBlvXrUAS3CSlwxtyxZEmDWWjbLxm7wosiefE7Jb0_riWYWFRaXLZWJ6lZJODPwIZW-rZAPWnG_JGHES0gqyCd5UUQcqMbLKXO-Ms0aj"
-                alt="User Profile"
-                class="w-full h-full object-cover"
-              />
-            </div>
-          </div>
-        </div>
       </header>
 
-      <div class="p-4 md:p-8 lg:p-10 space-y-8 max-w-[1400px] mx-auto">
-        <div
-          class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+      <div class="p-4 md:p-8 lg:p-10 max-w-[1400px] mx-auto">
+        <section
+          class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8"
         >
           <h2 class="font-display-lg text-3xl md:text-4xl text-primary">
             Faculty Management
           </h2>
-
           <button
+            id="openAddFacultyBtn"
             class="bg-primary text-on-primary font-label-md py-3 px-6 rounded-lg offset-shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <span class="material-symbols-outlined">add_circle</span>
             Add Faculty
           </button>
-        </div>
+        </section>
 
+        <!-- Un-commented Data Table -->
         <div
           class="bg-white hand-drawn-border-sm offset-shadow-sm w-full flex flex-col overflow-hidden"
         >
@@ -291,9 +223,9 @@
                   <th class="pb-4 pt-2 font-label-md text-primary px-4">
                     Weekly Load
                   </th>
-                  <th class="pb-4 pt-2 font-label-md text-primary px-4">
+                  <!-- <th class="pb-4 pt-2 font-label-md text-primary px-4">
                     Availability
-                  </th>
+                  </th> -->
                   <th
                     class="pb-4 pt-2 font-label-md text-primary px-4 text-center"
                   >
@@ -301,206 +233,247 @@
                   </th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-surface-variant">
-                <tr class="hover:bg-surface-container-lowest transition-colors">
-                  <td class="py-5 px-4 font-label-md text-primary">
-                    Dr. Aris Thorne
-                  </td>
-                  <td class="py-5 px-4 text-on-surface-variant">
-                    Computer Science
-                  </td>
-                  <td class="py-5 px-4 text-on-surface-variant">15 hours</td>
-                  <td class="py-5 px-4">
-                    <span
-                      class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-label-sm border border-primary"
-                    >
-                      <span class="material-symbols-outlined text-[16px]"
-                        >check_circle</span
-                      >
-                      Available
-                    </span>
-                  </td>
-                  <td class="py-5 px-4">
-                    <div
-                      class="flex items-center justify-center gap-3 text-primary"
-                    >
-                      <button
-                        class="p-1.5 hover:bg-secondary-container rounded-md transition-colors"
-                        title="Edit"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                      <button
-                        class="p-1.5 hover:bg-error-container hover:text-error rounded-md transition-colors"
-                        title="Delete"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >delete</span
-                        >
-                      </button>
-                      <button
-                        class="p-1.5 hover:bg-surface-container-high rounded-md transition-colors"
-                        title="View Details"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >visibility</span
-                        >
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-
-                <tr class="hover:bg-surface-container-lowest transition-colors">
-                  <td class="py-5 px-4 font-label-md text-primary">
-                    Professor Snape
-                  </td>
-                  <td class="py-5 px-4 text-on-surface-variant">Chemistry</td>
-                  <td class="py-5 px-4 text-on-surface-variant">20 hours</td>
-                  <td class="py-5 px-4">
-                    <span
-                      class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container text-label-sm border border-primary"
-                    >
-                      <span class="material-symbols-outlined text-[16px]"
-                        >cancel</span
-                      >
-                      Busy
-                    </span>
-                  </td>
-                  <td class="py-5 px-4">
-                    <div
-                      class="flex items-center justify-center gap-3 text-primary"
-                    >
-                      <button
-                        class="p-1.5 hover:bg-secondary-container rounded-md transition-colors"
-                        title="Edit"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                      <button
-                        class="p-1.5 hover:bg-error-container hover:text-error rounded-md transition-colors"
-                        title="Delete"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >delete</span
-                        >
-                      </button>
-                      <button
-                        class="p-1.5 hover:bg-surface-container-high rounded-md transition-colors"
-                        title="View Details"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >visibility</span
-                        >
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-
-                <tr class="hover:bg-surface-container-lowest transition-colors">
-                  <td class="py-5 px-4 font-label-md text-primary">
-                    Dr. Minerva McGonagall
-                  </td>
-                  <td class="py-5 px-4 text-on-surface-variant">
-                    Transfiguration
-                  </td>
-                  <td class="py-5 px-4 text-on-surface-variant">18 hours</td>
-                  <td class="py-5 px-4">
-                    <span
-                      class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-label-sm border border-primary"
-                    >
-                      <span class="material-symbols-outlined text-[16px]"
-                        >check_circle</span
-                      >
-                      Available
-                    </span>
-                  </td>
-                  <td class="py-5 px-4">
-                    <div
-                      class="flex items-center justify-center gap-3 text-primary"
-                    >
-                      <button
-                        class="p-1.5 hover:bg-secondary-container rounded-md transition-colors"
-                        title="Edit"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >edit</span
-                        >
-                      </button>
-                      <button
-                        class="p-1.5 hover:bg-error-container hover:text-error rounded-md transition-colors"
-                        title="Delete"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >delete</span
-                        >
-                      </button>
-                      <button
-                        class="p-1.5 hover:bg-surface-container-high rounded-md transition-colors"
-                        title="View Details"
-                      >
-                        <span class="material-symbols-outlined text-[20px]"
-                          >visibility</span
-                        >
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
+              <!-- Empty table body ready for Javascript injection -->
+              <tbody
+                id="facultyTableBody"
+                class="divide-y divide-surface-variant"
+              ></tbody>
             </table>
           </div>
         </div>
       </div>
     </main>
 
-    <nav
-      class="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t-2 border-primary px-2 py-3 flex justify-around items-center z-50 shadow-[0px_-4px_10px_rgba(0,0,0,0.05)]"
+    <!-- Add Faculty Modal -->
+    <div
+      id="addFacultyModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm opacity-0 hidden transition-opacity duration-300"
     >
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
+      <div
+        id="addFacultyModalContent"
+        class="bg-surface w-[90%] max-w-md hand-drawn-border-sm offset-shadow-sm p-6 md:p-8 transform scale-95 transition-transform duration-300"
       >
-        <span class="material-symbols-outlined">dashboard</span>
-        <span class="font-label-sm text-[10px]">Home</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
-      >
-        <span class="material-symbols-outlined">auto_awesome</span>
-        <span class="font-label-sm text-[10px]">Schedules</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant relative -top-5"
-      >
-        <div
-          class="bg-primary text-on-primary p-3 md:p-4 rounded-full border-2 border-surface shadow-[0_4px_0_0_#181919] hover:-translate-y-1 transition-transform"
-        >
-          <span class="material-symbols-outlined text-xl">add</span>
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-headline-md text-2xl text-primary">Add Faculty</h3>
+          <button
+            id="closeModalBtn"
+            type="button"
+            class="text-on-surface-variant hover:text-error transition-colors p-1"
+          >
+            <span class="material-symbols-outlined text-3xl">close</span>
+          </button>
         </div>
-        <span
-          class="font-label-sm text-[10px] absolute -bottom-4 text-primary font-bold"
-          >Create</span
-        >
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-primary font-bold"
-      >
-        <span class="material-symbols-outlined">school</span>
-        <span class="font-label-sm text-[10px]">Staff</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
-      >
-        <span class="material-symbols-outlined">settings</span>
-        <span class="font-label-sm text-[10px]">Admin</span>
-      </a>
-    </nav>
+
+        <form id="newFacultyForm" class="space-y-5">
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Department <span class="text-error">*</span></label
+            >
+            <div class="relative">
+              <select
+                id="facultyDept"
+                required
+                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+              >
+                <option value="" disabled selected>Select Department...</option>
+                <!-- JS will inject departments here -->
+              </select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                >expand_more</span
+              >
+            </div>
+          </div>
+
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Faculty Name <span class="text-error">*</span></label
+            >
+            <input
+              type="text"
+              id="facultyName"
+              required
+              placeholder="e.g. Dr. Alan Turing"
+              class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container"
+            />
+          </div>
+
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Max Weekly Hours <span class="text-error">*</span></label
+            >
+            <input
+              type="number"
+              id="facultyHours"
+              required
+              min="1"
+              max="40"
+              value="15"
+              class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container"
+            />
+            <p class="text-label-sm text-on-surface-variant">
+              Must be between 1 and 40.
+            </p>
+          </div>
+
+          <div class="pt-4">
+            <button
+              type="submit"
+              id="saveFacultyBtn"
+              class="w-full bg-primary text-on-primary font-label-md py-3 px-4 rounded-lg shadow-[4px_4px_0px_0px_rgba(24,25,25,0.3)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
+            >
+              <span class="material-symbols-outlined">save</span>
+              Save Faculty
+            </button>
+          </div>
+        </form>
+        <div id="statusMessage" class="mt-4 font-label-md hidden"></div>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = "http://127.0.0.1:8000";
+
+      // Fixed Button Selection
+      const openModalBtn = document.getElementById("openAddFacultyBtn");
+      const addModal = document.getElementById("addFacultyModal");
+      const addModalContent = document.getElementById("addFacultyModalContent");
+      const closeModalBtn = document.getElementById("closeModalBtn");
+
+      // Form Elements
+      const newFacultyForm = document.getElementById("newFacultyForm");
+      const facultyTableBody = document.getElementById("facultyTableBody");
+      const deptDropdown = document.getElementById("facultyDept");
+      const statusMessage = document.getElementById("statusMessage");
+
+      // --- Modal Logic ---
+      openModalBtn.addEventListener("click", () => {
+        addModal.classList.remove("hidden");
+        setTimeout(() => {
+          addModal.classList.remove("opacity-0");
+          addModalContent.classList.remove("scale-95");
+        }, 10);
+      });
+
+      const closeModal = () => {
+        addModal.classList.add("opacity-0");
+        addModalContent.classList.add("scale-95");
+        setTimeout(() => addModal.classList.add("hidden"), 300);
+        statusMessage.classList.add("hidden");
+      };
+      closeModalBtn.addEventListener("click", closeModal);
+      addModal.addEventListener("click", (e) => {
+        if (e.target === addModal) closeModal();
+      });
+
+      // --- API Logic ---
+      async function loadDepartmentsForDropdown() {
+        try {
+          const response = await fetch(`${API_URL}/get-departments/`);
+          const result = await response.json();
+          result.data.forEach((dept) => {
+            deptDropdown.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+          });
+        } catch (err) {
+          console.error("Failed to load departments for dropdown");
+        }
+      }
+
+      async function loadFaculties() {
+        try {
+          const response = await fetch(`${API_URL}/get-faculties/`);
+          const result = await response.json();
+          facultyTableBody.innerHTML = "";
+
+          result.data.forEach((fac) => {
+            facultyTableBody.innerHTML += `
+          <tr class="hover:bg-surface-container-lowest transition-colors">
+            <td class="py-5 px-4 font-label-md text-primary">${fac.name}</td>
+            <td class="py-5 px-4 text-on-surface-variant">${fac.department_name}</td>
+            <td class="py-5 px-4 text-on-surface-variant">${fac.max_weekly_hours} hours</td>
+            <!-- <td class="py-5 px-4">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-label-sm border border-primary">
+                Available
+              </span>
+            </td> -->
+            <td class="py-5 px-4 text-center">
+              <button onclick="deleteFaculty(${fac.id})" class="p-1.5 hover:bg-error-container hover:text-error rounded-md transition-colors" title="Delete">
+                <span class="material-symbols-outlined text-[20px]">delete</span>
+              </button>
+            </td>
+          </tr>
+        `;
+          });
+        } catch (err) {
+          console.error("Failed to load faculties");
+        }
+      }
+
+      newFacultyForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const saveBtn = document.getElementById("saveFacultyBtn");
+        saveBtn.disabled = true;
+        saveBtn.innerText = "Saving...";
+        statusMessage.classList.add("hidden");
+
+        const payload = {
+          department_id: parseInt(deptDropdown.value),
+          name: document.getElementById("facultyName").value,
+          max_weekly_hours: parseInt(
+            document.getElementById("facultyHours").value,
+          ),
+        };
+
+        try {
+          const response = await fetch(`${API_URL}/add-faculty/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            statusMessage.className =
+              "mt-4 font-label-md text-tertiary-container";
+            statusMessage.innerText = "✅ Faculty added successfully!";
+            newFacultyForm.reset();
+            loadFaculties(); // Refresh table immediately
+            setTimeout(closeModal, 1000);
+          } else {
+            statusMessage.className = "mt-4 font-label-md text-error";
+            statusMessage.innerText = "⚠️ " + result.detail;
+          }
+        } catch (err) {
+          statusMessage.className = "mt-4 font-label-md text-error";
+          statusMessage.innerText = "❌ Server offline. Check FastAPI.";
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML =
+            '<span class="material-symbols-outlined">save</span> Save Faculty';
+          statusMessage.classList.remove("hidden");
+        }
+      });
+
+      async function deleteFaculty(id) {
+        if (
+          !confirm(
+            "Remove this faculty member? This may affect active schedules.",
+          )
+        )
+          return;
+        const response = await fetch(`${API_URL}/delete-faculty/${id}`, {
+          method: "DELETE",
+        });
+        if (response.ok) loadFaculties();
+        else alert("Cannot delete. They might be assigned to a timetable.");
+      }
+
+      // Initialize Page
+      document.addEventListener("DOMContentLoaded", () => {
+        loadDepartmentsForDropdown();
+        loadFaculties();
+      });
+    </script>
   </body>
 </html>

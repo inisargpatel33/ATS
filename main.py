@@ -5,7 +5,8 @@ from psycopg2.extras import RealDictCursor
 from ortools.sat.python import cp_model
 from pydantic import BaseModel
 from typing import List
-
+from typing import Optional
+import psycopg2.errors
 app = FastAPI(title="Timetable SaaS API")
 
 app.add_middleware(
@@ -31,7 +32,133 @@ class RoomCreate(BaseModel):
     amenities: List[str]
     is_active: bool = True
     department_id: int
+    
+    
+    
+    
+class DeptCreate(BaseModel):
+    name: str
 
+# --- DEPARTMENT API ROUTES ---
+
+@app.post("/add-department/")
+def add_department(dept: DeptCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO departments (name) VALUES (%s) RETURNING id;", (dept.name,))
+        conn.commit()
+        return {"success": True, "message": "Added successfully!"}
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Department already exists.")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/get-departments/")
+def get_departments():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM departments ORDER BY id ASC;")
+        return {"data": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/delete-department/{dept_id}")
+def delete_department(dept_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM departments WHERE id = %s RETURNING id;", (dept_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Department not found.")
+        conn.commit()
+        return {"success": True, "message": "Deleted"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+# ==========================================
+# FACULTY API
+# ==========================================
+class FacultyCreate(BaseModel):
+    department_id: int
+    name: str
+    max_weekly_hours: int = 15
+
+@app.post("/add-faculty/")
+def add_faculty(faculty: FacultyCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO faculties (department_id, name, max_weekly_hours)
+            VALUES (%s, %s, %s) RETURNING id;
+        """, (faculty.department_id, faculty.name, faculty.max_weekly_hours))
+        conn.commit()
+        return {"success": True, "message": "Faculty added successfully!"}
+        
+    except psycopg2.errors.CheckViolation:
+        # Catches the (max_weekly_hours > 0 AND <= 40) constraint
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Weekly hours must be between 1 and 40.")
+    except psycopg2.errors.UniqueViolation:
+        # Catches the UNIQUE (department_id, name) constraint
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="This faculty member already exists in this department.")
+    except psycopg2.errors.ForeignKeyViolation:
+        # Catches if the department ID doesn't exist
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Invalid Department selected.")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/get-faculties/")
+def get_faculties():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # JOIN with departments so we can display the actual department name in the UI
+        cursor.execute("""
+            SELECT f.id, f.name, f.max_weekly_hours, d.name as department_name 
+            FROM faculties f
+            JOIN departments d ON f.department_id = d.id
+            ORDER BY f.id ASC;
+        """)
+        return {"data": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/delete-faculty/{faculty_id}")
+def delete_faculty(faculty_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM faculties WHERE id = %s RETURNING id;", (faculty_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Faculty not found.")
+        conn.commit()
+        return {"success": True, "message": "Deleted"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
 # ==========================================
 # ROOMS API
 # ==========================================
@@ -151,13 +278,10 @@ def delete_room(room_id: int):
         conn.close()
 
 
-# ==========================================
-# BATCHES API
-# ==========================================
 class BatchCreate(BaseModel):
     name: str
     student_count: int
-    mentor_name: str
+    mentor_id: Optional[int] = None  # Replaced mentor_name with mentor_id
     department_id: int
 
 @app.post("/add-batch/")
@@ -166,14 +290,22 @@ def add_batch(batch: BatchCreate):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO batches (name, student_count, mentor_name, department_id)
+            INSERT INTO batches (name, student_count, mentor_id, department_id)
             VALUES (%s, %s, %s, %s) RETURNING id;
-        """, (batch.name, batch.student_count, batch.mentor_name, batch.department_id))
+        """, (batch.name, batch.student_count, batch.mentor_id, batch.department_id))
         conn.commit()
         return {"success": True, "message": f"Batch '{batch.name}' added successfully!"}
+        
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="A batch with this name already exists in this department.")
+    except psycopg2.errors.CheckViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Student count must be greater than 0.")
+    except psycopg2.errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Invalid Department or Mentor selected.")
     except Exception as e:
-        print("--- DATABASE INSERT ERROR ---")
-        print(e)
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -185,18 +317,19 @@ def get_batches(department_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT * FROM batches WHERE department_id = %s ORDER BY name ASC", (department_id,))
+        # Use LEFT JOIN because mentor_id can be NULL
+        cursor.execute("""
+            SELECT b.id, b.name, b.student_count, b.department_id, b.mentor_id, f.name AS mentor_name 
+            FROM batches b
+            LEFT JOIN faculties f ON b.mentor_id = f.id
+            WHERE b.department_id = %s 
+            ORDER BY b.name ASC;
+        """, (department_id,))
         return {"data": cursor.fetchall()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cursor.close()
         conn.close()
-        
 
-# ==========================================
-# UPDATE BATCH API
-# ==========================================
 @app.put("/edit-batch/{batch_id}")
 def edit_batch(batch_id: int, batch: BatchCreate):
     conn = get_db_connection()
@@ -204,49 +337,48 @@ def edit_batch(batch_id: int, batch: BatchCreate):
     try:
         cursor.execute("""
             UPDATE batches 
-            SET name = %s, student_count = %s, mentor_name = %s, department_id = %s
+            SET name = %s, student_count = %s, mentor_id = %s, department_id = %s
             WHERE id = %s RETURNING id;
-        """, (batch.name, batch.student_count, batch.mentor_name, batch.department_id, batch_id))
+        """, (batch.name, batch.student_count, batch.mentor_id, batch.department_id, batch_id))
         
         if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Batch not found")
+            raise HTTPException(status_code=404, detail="Batch not found.")
             
         conn.commit()
         return {"success": True, "message": f"Batch '{batch.name}' updated successfully!"}
+        
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="A batch with this name already exists in this department.")
+    except psycopg2.errors.CheckViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Student count must be greater than 0.")
+    except psycopg2.errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Invalid Department or Mentor selected.")
     except Exception as e:
-        print("--- DATABASE UPDATE ERROR ---")
-        print(e)
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cursor.close()
         conn.close()
 
-# ==========================================
-# DELETE BATCH API
-# ==========================================
 @app.delete("/delete-batch/{batch_id}")
 def delete_batch(batch_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("DELETE FROM batches WHERE id = %s RETURNING id;", (batch_id,))
-        
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Batch not found")
-            
         conn.commit()
         return {"success": True, "message": "Batch deleted successfully!"}
     except Exception as e:
-        print("--- DATABASE DELETE ERROR ---")
-        print(e)
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cursor.close()
         conn.close()
-
-
 
 # ==========================================
 # SUBJECTS API
@@ -268,6 +400,18 @@ def add_subject(subject: SubjectCreate):
         """, (subject.name, subject.subject_type, subject.required_sessions, subject.department_id))
         conn.commit()
         return {"success": True, "message": f"Subject '{subject.name}' added successfully!"}
+        
+    except psycopg2.errors.CheckViolation as e:
+        conn.rollback()
+        error_msg = str(e).lower()
+        if "subject_type" in error_msg:
+            detail = "Invalid subject type. Must be 'Theory', 'Practical', or 'Seminar'."
+        else:
+            detail = "Required sessions must be between 1 and 10."
+        raise HTTPException(status_code=400, detail=detail)
+    except psycopg2.errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Invalid Department selected.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -280,7 +424,14 @@ def get_subjects(department_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT * FROM subjects WHERE department_id = %s ORDER BY name ASC", (department_id,))
+        # We join with departments so the UI can display the department name
+        cursor.execute("""
+            SELECT s.id, s.name, s.subject_type, s.required_sessions, s.department_id, d.name AS department_name
+            FROM subjects s
+            JOIN departments d ON s.department_id = d.id
+            WHERE s.department_id = %s 
+            ORDER BY s.name ASC;
+        """, (department_id,))
         return {"data": cursor.fetchall()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -302,6 +453,18 @@ def edit_subject(subject_id: int, subject: SubjectCreate):
             raise HTTPException(status_code=404, detail="Subject not found")
         conn.commit()
         return {"success": True, "message": "Subject updated successfully!"}
+        
+    except psycopg2.errors.CheckViolation as e:
+        conn.rollback()
+        error_msg = str(e).lower()
+        if "subject_type" in error_msg:
+            detail = "Invalid subject type. Must be 'Theory', 'Practical', or 'Seminar'."
+        else:
+            detail = "Required sessions must be between 1 and 10."
+        raise HTTPException(status_code=400, detail=detail)
+    except psycopg2.errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Invalid Department selected.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -326,6 +489,53 @@ def delete_subject(subject_id: int):
         cursor.close()
         conn.close()
 
+
+# ==========================================
+# FACULTY EXPERTISE API
+# ==========================================
+class ExpertiseCreate(BaseModel):
+    faculty_id: int
+    subject_id: int
+    competency_tier: float
+
+@app.post("/add-expertise/")
+def add_expertise(exp: ExpertiseCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO faculty_expertise (faculty_id, subject_id, competency_tier)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (faculty_id, subject_id) 
+            DO UPDATE SET competency_tier = EXCLUDED.competency_tier;
+        """, (exp.faculty_id, exp.subject_id, exp.competency_tier))
+        conn.commit()
+        return {"success": True, "message": "Expertise mapped successfully!"}
+    except psycopg2.errors.CheckViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Competency tier must be 1.0 or 0.5.")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/get-expertise/{faculty_id}")
+def get_faculty_expertise(faculty_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT s.id, s.name, fe.competency_tier 
+            FROM faculty_expertise fe
+            JOIN subjects s ON fe.subject_id = s.id
+            WHERE fe.faculty_id = %s;
+        """, (faculty_id,))
+        return {"data": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
 # ==========================================
 # TIMETABLE API
 # ==========================================
