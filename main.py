@@ -150,6 +150,182 @@ def delete_room(room_id: int):
         cursor.close()
         conn.close()
 
+
+# ==========================================
+# BATCHES API
+# ==========================================
+class BatchCreate(BaseModel):
+    name: str
+    student_count: int
+    mentor_name: str
+    department_id: int
+
+@app.post("/add-batch/")
+def add_batch(batch: BatchCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO batches (name, student_count, mentor_name, department_id)
+            VALUES (%s, %s, %s, %s) RETURNING id;
+        """, (batch.name, batch.student_count, batch.mentor_name, batch.department_id))
+        conn.commit()
+        return {"success": True, "message": f"Batch '{batch.name}' added successfully!"}
+    except Exception as e:
+        print("--- DATABASE INSERT ERROR ---")
+        print(e)
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/get-batches/{department_id}")
+def get_batches(department_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM batches WHERE department_id = %s ORDER BY name ASC", (department_id,))
+        return {"data": cursor.fetchall()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+        
+
+# ==========================================
+# UPDATE BATCH API
+# ==========================================
+@app.put("/edit-batch/{batch_id}")
+def edit_batch(batch_id: int, batch: BatchCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE batches 
+            SET name = %s, student_count = %s, mentor_name = %s, department_id = %s
+            WHERE id = %s RETURNING id;
+        """, (batch.name, batch.student_count, batch.mentor_name, batch.department_id, batch_id))
+        
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Batch not found")
+            
+        conn.commit()
+        return {"success": True, "message": f"Batch '{batch.name}' updated successfully!"}
+    except Exception as e:
+        print("--- DATABASE UPDATE ERROR ---")
+        print(e)
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+# ==========================================
+# DELETE BATCH API
+# ==========================================
+@app.delete("/delete-batch/{batch_id}")
+def delete_batch(batch_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM batches WHERE id = %s RETURNING id;", (batch_id,))
+        
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Batch not found")
+            
+        conn.commit()
+        return {"success": True, "message": "Batch deleted successfully!"}
+    except Exception as e:
+        print("--- DATABASE DELETE ERROR ---")
+        print(e)
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+# ==========================================
+# SUBJECTS API
+# ==========================================
+class SubjectCreate(BaseModel):
+    name: str
+    subject_type: str
+    required_sessions: int
+    department_id: int
+
+@app.post("/add-subject/")
+def add_subject(subject: SubjectCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO subjects (name, subject_type, required_sessions, department_id)
+            VALUES (%s, %s, %s, %s) RETURNING id;
+        """, (subject.name, subject.subject_type, subject.required_sessions, subject.department_id))
+        conn.commit()
+        return {"success": True, "message": f"Subject '{subject.name}' added successfully!"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/get-subjects/{department_id}")
+def get_subjects(department_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM subjects WHERE department_id = %s ORDER BY name ASC", (department_id,))
+        return {"data": cursor.fetchall()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/edit-subject/{subject_id}")
+def edit_subject(subject_id: int, subject: SubjectCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE subjects 
+            SET name = %s, subject_type = %s, required_sessions = %s, department_id = %s
+            WHERE id = %s RETURNING id;
+        """, (subject.name, subject.subject_type, subject.required_sessions, subject.department_id, subject_id))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        conn.commit()
+        return {"success": True, "message": "Subject updated successfully!"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/delete-subject/{subject_id}")
+def delete_subject(subject_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM subjects WHERE id = %s RETURNING id;", (subject_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        conn.commit()
+        return {"success": True, "message": "Subject deleted successfully!"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
 # ==========================================
 # TIMETABLE API
 # ==========================================
