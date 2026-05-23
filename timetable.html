@@ -773,10 +773,18 @@
           if (!timeTextElement) return;
 
           // Convert frontend time text to match backend format (e.g., "8:00 AM" -> "Slot1")
+          // Map the UI sidebar times to the backend's SHIFT_SLOTS format
           let slotKey = "";
-          if (timeTextElement.innerText.includes("8:00")) slotKey = "Slot1";
-          if (timeTextElement.innerText.includes("10:00")) slotKey = "Slot2";
-          if (timeTextElement.innerText.includes("1:00")) slotKey = "Slot3";
+          if (timeTextElement.innerText.includes("8:00"))
+            slotKey = "08:00 AM - 09:00 AM";
+          if (timeTextElement.innerText.includes("9:00"))
+            slotKey = "09:00 AM - 10:00 AM";
+          if (timeTextElement.innerText.includes("10:00"))
+            slotKey = "10:00 AM - 11:00 AM";
+          if (timeTextElement.innerText.includes("12:00"))
+            slotKey = "12:00 PM - 01:00 PM";
+          if (timeTextElement.innerText.includes("1:00"))
+            slotKey = "01:00 PM - 02:00 PM";
 
           // If this is the lunch row, skip it
           if (!slotKey) return;

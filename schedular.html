@@ -319,13 +319,18 @@
 
             <div class="space-y-6 flex-grow">
               <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary">Academic Term</label>
+                <label class="font-label-md text-primary"
+                  >Select Department</label
+                >
                 <div class="relative">
                   <select
-                    class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:ring-0 appearance-none pr-10"
+                    id="facultyDept"
+                    required
+                    class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
                   >
-                    <option>Autumn Semester 2024</option>
-                    <option>Spring Semester 2025</option>
+                    <option value="" disabled selected>
+                      Select Department...
+                    </option>
                   </select>
                   <span
                     class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
@@ -335,17 +340,18 @@
               </div>
 
               <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary">Target Scope</label>
+                <label class="font-label-md text-primary">Batch Name</label>
                 <div class="relative">
                   <!-- THE ID MUST BE EXACTLY "target-scope" -->
                   <select
                     id="target-scope"
                     class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:ring-0 appearance-none pr-10"
                   >
-                    <option value="global">Entire University (Global)</option>
-                    <option value="1">Computer Science Dept.</option>
-                    <option value="2">Mechanical Engineering Dept.</option>
+                    <option value="" disabled selected>
+                      Select Department First
+                    </option>
                   </select>
+
                   <span
                     class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
                     >expand_more</span
@@ -353,22 +359,52 @@
                 </div>
               </div>
 
-              <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary"
-                  >Primary Constraint Rule</label
+              <div class="flex flex-col space-y-3 mt-4">
+                <label class="font-label-md text-primary font-bold"
+                  >Optimization Constraints</label
                 >
-                <div class="relative">
-                  <select
-                    class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:ring-0 appearance-none pr-10"
-                  >
-                    <option>Minimize Student Gaps (Optimal Flow)</option>
-                    <option>Strict Faculty Load Balancing</option>
-                    <option>Maximum Room Utilization</option>
-                  </select>
-                  <span
-                    class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                    >expand_more</span
-                  >
+                <div class="flex flex-col gap-2">
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      value="no_consecutive"
+                      class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
+                      checked
+                    />
+                    <span class="text-body-md text-on-surface-variant"
+                      >Prevent Back-to-Back same subjects</span
+                    >
+                  </label>
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      value="strict_faculty_load"
+                      class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
+                    />
+                    <span class="text-body-md text-on-surface-variant"
+                      >Strict Faculty Load (Max 2 classes/day)</span
+                    >
+                  </label>
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      value="faculty_day_off"
+                      class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
+                    />
+                    <span class="text-body-md text-on-surface-variant"
+                      >Guarantee 1 Day Off per Faculty</span
+                    >
+                  </label>
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      value="morning_heavy"
+                      class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
+                    />
+                    <span class="text-body-md text-on-surface-variant"
+                      >Prefer Morning Slots (Compact Schedule)</span
+                    >
+                  </label>
                 </div>
               </div>
             </div>
@@ -552,67 +588,110 @@
         <span class="font-label-sm text-[10px]">Staff</span>
       </a>
     </nav>
-
     <script>
-      // This ensures the browser has finished reading the HTML before attaching the button
-      document.addEventListener("DOMContentLoaded", () => {
+      const API_URL = "http://127.0.0.1:8000";
+
+      document.addEventListener("DOMContentLoaded", async () => {
+        const deptDropdown = document.getElementById("facultyDept");
+        const scopeSelect = document.getElementById("target-scope");
         const generateBtn = document.getElementById("generate-btn");
 
+        // 1. Fetch Dynamic Departments
+        try {
+          const response = await fetch(`${API_URL}/get-departments/`);
+          const result = await response.json();
+          result.data.forEach((dept) => {
+            deptDropdown.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+          });
+        } catch (err) {
+          console.error("Failed to load departments for dropdown");
+        }
+
+        // Listen for whenever the user changes the department
+        deptDropdown.addEventListener("change", async function () {
+          const selectedDeptId = this.value;
+
+          // Clear out the old batches and show a loading state
+          scopeSelect.innerHTML = `<option value="" disabled selected>Loading batches...</option>`;
+
+          try {
+            // Fetch batches ONLY for the selected department
+            const response = await fetch(
+              `${API_URL}/get-batches/${selectedDeptId}`,
+            );
+            const result = await response.json();
+
+            // Clear the loading text
+            scopeSelect.innerHTML = `<option value="" disabled selected>Select a Batch...</option>`;
+
+            // Check if the department actually has batches
+            if (result.data && result.data.length > 0) {
+              // Inject the new batches
+              result.data.forEach((batch) => {
+                scopeSelect.innerHTML += `<option value="${batch.id}">${batch.name}</option>`;
+              });
+            } else {
+              // Tell the user if it's empty
+              scopeSelect.innerHTML = `<option value="" disabled selected>No batches in this department</option>`;
+            }
+          } catch (error) {
+            console.error("Failed to fetch batches:", error);
+            scopeSelect.innerHTML = `<option value="" disabled selected>Error loading batches</option>`;
+          }
+        });
+
+        // 2. Generation Engine Trigger
         if (generateBtn) {
           generateBtn.addEventListener("click", async function () {
-            // 1. Grab the dropdown safely
-            const scopeSelect = document.getElementById("target-scope");
-            if (!scopeSelect) {
+            const departmentId = deptDropdown.value;
+
+            if (departmentId === "global" || !departmentId) {
               alert(
-                "Error: Could not find the Target Scope dropdown in the HTML.",
+                "Please select a specific department to prevent server overload.",
               );
               return;
             }
 
-            const departmentId = scopeSelect.value;
+            // --- GRAB ALL CHECKED CONSTRAINTS FROM THE UI ---
+            const checkedConstraints = Array.from(
+              document.querySelectorAll(".rule-checkbox:checked"),
+            ).map((cb) => cb.value);
 
-            if (departmentId === "global") {
-              alert(
-                "Global generation is locked. Please select a specific department (like Computer Science) to prevent server overload.",
-              );
-              return;
-            }
-
-            // 2. Change button to loading state
+            // UX: Change button to Crunching Math state
             const originalContent = this.innerHTML;
             this.innerHTML = `
-                    <div class="absolute inset-0 bg-white opacity-20 transition-opacity"></div>
-                    <span class="material-symbols-outlined text-3xl md:text-4xl text-primary relative z-10 animate-spin">sync</span>
-                    <span class="font-display-lg text-2xl md:text-3xl text-primary tracking-tight relative z-10">Crunching Math...</span>
-                `;
+              <div class="absolute inset-0 bg-white opacity-20 transition-opacity"></div>
+              <span class="material-symbols-outlined text-3xl md:text-4xl text-primary relative z-10 animate-spin">sync</span>
+              <span class="font-display-lg text-2xl md:text-3xl text-primary tracking-tight relative z-10">Crunching Math...</span>
+            `;
             this.disabled = true;
 
-            // 3. Talk to Python
+            // API Call to Python Solver WITH CONSTRAINTS PAYLOAD
             try {
-              const apiUrl = `http://127.0.0.1:8000/generate-timetable/${departmentId}`;
-
-              const response = await fetch(apiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-              });
+              const response = await fetch(
+                `${API_URL}/generate-timetable/${departmentId}`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ constraints: checkedConstraints }), // <-- SENDING DATA HERE
+                },
+              );
 
               const data = await response.json();
 
               if (data.success) {
                 alert(
-                  `Engine Success! ${data.total_lectures_scheduled} lectures scheduled for Department ${departmentId}.`,
+                  `Engine Success! ${data.total_lectures_scheduled} lectures optimally scheduled.`,
                 );
-                window.location.href = "timetable.html";
+                window.location.href = "timetable.html"; // Redirect to view
               } else {
                 alert("Engine Failed: " + data.message);
               }
             } catch (error) {
-              console.error("API Connection Error:", error);
               alert(
-                "Could not connect to the Python server. Check your VS Code terminal to see if Uvicorn is running!",
+                "Could not connect to the Python server. Ensure Uvicorn is running.",
               );
             } finally {
-              // Restore button
               this.innerHTML = originalContent;
               this.disabled = false;
             }

@@ -21,59 +21,25 @@
           extend: {
             colors: {
               surface: "#fdf8f8",
-              "primary-fixed-dim": "#c8c6c6",
-              "on-error-container": "#93000a",
-              outline: "#747878",
-              "on-primary": "#ffffff",
               "on-surface-variant": "#444748",
-              "tertiary-fixed": "#d8e8c7",
-              "on-secondary-fixed": "#001e2c",
               "surface-variant": "#e5e2e1",
-              "on-primary-container": "#959494",
-              "primary-fixed": "#e4e2e1",
-              "on-secondary": "#ffffff",
               "surface-container-high": "#ebe7e7",
-              "on-tertiary-fixed": "#131f0b",
-              "outline-variant": "#c4c7c7",
               secondary: "#456273",
-              "on-secondary-fixed-variant": "#2d4a5a",
-              "inverse-primary": "#c8c6c6",
-              "on-surface": "#1c1b1b",
               primary: "#181919",
               "secondary-container": "#c8e7fb",
               error: "#ba1a1a",
-              tertiary: "#101c08",
               "on-tertiary": "#ffffff",
-              "surface-container": "#f1edec",
-              "surface-container-highest": "#e5e2e1",
-              background: "#fdf8f8",
-              "inverse-surface": "#313030",
-              "on-primary-fixed-variant": "#474747",
-              "secondary-fixed": "#c8e7fb",
-              "surface-container-lowest": "#ffffff",
-              "tertiary-container": "#24311b",
-              "on-background": "#1c1b1b",
-              "on-error": "#ffffff",
-              "surface-tint": "#5f5e5e",
-              "inverse-on-surface": "#f4f0ef",
-              "primary-container": "#2d2d2d",
-              "surface-container-low": "#f7f3f2",
-              "surface-dim": "#ddd9d8",
-              "on-primary-fixed": "#1b1c1c",
-              "surface-bright": "#fdf8f8",
-              "tertiary-fixed-dim": "#bcccac",
-              "on-tertiary-container": "#8a9a7d",
-              "on-secondary-container": "#4b6879",
-              "on-tertiary-fixed-variant": "#3d4b33",
-              "secondary-fixed-dim": "#adcbde",
+              "on-primary": "#ffffff",
               "error-container": "#ffdad6",
+              "tertiary-fixed": "#d8e8c7",
+              "on-tertiary-fixed-variant": "#3d4b33",
             },
             fontFamily: {
               "headline-md": ["Bricolage Grotesque"],
               "headline-lg": ["Bricolage Grotesque"],
-              "body-lg": ["Plus Jakarta Sans"],
               "display-lg": ["Bricolage Grotesque"],
               "body-md": ["Plus Jakarta Sans"],
+              "body-lg": ["Plus Jakarta Sans"],
               "label-md": ["Plus Jakarta Sans"],
               "label-sm": ["Plus Jakarta Sans"],
             },
@@ -91,17 +57,13 @@
         display: inline-block;
         line-height: 1;
       }
-
       .hand-drawn-border-sm {
         border: 2px solid #181919;
         border-radius: 12px 4px 14px 5px/4px 12px 5px 14px;
       }
-
       .offset-shadow-sm {
         box-shadow: 4px 4px 0px 0px rgba(24, 25, 25, 1);
       }
-
-      /* Custom scrollbar for dropdowns if needed */
       ::-webkit-scrollbar {
         width: 8px;
       }
@@ -127,55 +89,46 @@
       <nav class="flex-1 flex flex-col gap-1 overflow-y-auto">
         <a
           href="index.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
+          ><span class="material-symbols-outlined">dashboard</span
+          ><span class="font-label-md">Dashboard</span></a
         >
-          <span class="material-symbols-outlined">dashboard</span>
-          <span class="font-label-md">Dashboard</span>
-        </a>
         <a
           href="faculty.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
+          ><span class="material-symbols-outlined">school</span
+          ><span class="font-label-md">Faculty</span></a
         >
-          <span class="material-symbols-outlined">school</span>
-          <span class="font-label-md">Faculty</span>
-        </a>
         <a
           href="room.html"
-          class="bg-secondary-container text-on-secondary-container border-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,1)] rounded-lg mx-2 my-1 px-4 py-3 flex items-center gap-3 active:scale-95 transition-transform"
+          class="bg-secondary-container text-primary border-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,1)] rounded-lg mx-2 my-1 px-4 py-3 flex items-center gap-3 active:scale-95 transition-transform"
+          ><span class="material-symbols-outlined">meeting_room</span
+          ><span class="font-label-md">Rooms</span></a
         >
-          <span class="material-symbols-outlined">meeting_room</span>
-          <span class="font-label-md">Rooms</span>
-        </a>
         <a
           href="batch.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
+          ><span class="material-symbols-outlined">groups</span
+          ><span class="font-label-md">Batches</span></a
         >
-          <span class="material-symbols-outlined">groups</span>
-          <span class="font-label-md">Batches</span>
-        </a>
-
         <a
           href="dept.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
+          ><span class="material-symbols-outlined">apartment</span
+          ><span class="font-label-md">Department</span></a
         >
-          <span class="material-symbols-outlined">apartment</span>
-          <span class="font-label-md">Department</span>
-        </a>
-
         <a
           href="subject.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
+          ><span class="material-symbols-outlined">menu_book</span
+          ><span class="font-label-md">Subjects</span></a
         >
-          <span class="material-symbols-outlined">menu_book</span>
-          <span class="font-label-md">Subjects</span>
-        </a>
         <a
-          href="scheduler.html"
-          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+          href="schedular.html"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
+          ><span class="material-symbols-outlined">auto_awesome</span
+          ><span class="font-label-md">Scheduler</span></a
         >
-          <span class="material-symbols-outlined">auto_awesome</span>
-          <span class="font-label-md">Scheduler</span>
-        </a>
         <a
           href="timetable.html"
           class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
@@ -184,30 +137,6 @@
           <span class="font-label-md">Timetables</span>
         </a>
       </nav>
-      <div class="px-4 mt-auto flex flex-col gap-2">
-        <button
-          class="bg-primary text-on-primary font-label-md py-3 px-4 rounded-lg shadow-[4px_4px_0px_0px_rgba(24,25,25,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2"
-        >
-          <span class="material-symbols-outlined">add</span>
-          New Schedule
-        </button>
-        <div class="pt-4 border-t border-outline-variant">
-          <a
-            href="#"
-            class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-2 rounded-lg transition-all"
-          >
-            <span class="material-symbols-outlined">help_outline</span>
-            <span class="font-label-md">Help Center</span>
-          </a>
-          <a
-            href="#"
-            class="text-error hover:opacity-80 flex items-center gap-3 px-4 py-2 rounded-lg transition-all"
-          >
-            <span class="material-symbols-outlined">logout</span>
-            <span class="font-label-md">Logout</span>
-          </a>
-        </div>
-      </div>
     </aside>
 
     <main class="md:ml-64 min-h-screen pb-24 md:pb-8">
@@ -220,46 +149,11 @@
             >SmartSched Uni</span
           >
         </div>
-        <div class="flex items-center gap-4 md:gap-6">
-          <div
-            class="hidden lg:flex items-center bg-surface-container border-2 border-primary rounded-full px-4 py-1 gap-2"
-          >
-            <span class="material-symbols-outlined text-on-surface-variant"
-              >search</span
-            >
-            <input
-              type="text"
-              placeholder="Search data..."
-              class="bg-transparent border-none focus:ring-0 text-body-md w-64"
-            />
-          </div>
-          <div class="flex items-center gap-2 md:gap-3">
-            <button
-              class="p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95"
-            >
-              <span class="material-symbols-outlined">notifications</span>
-            </button>
-            <button
-              class="hidden md:block p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95"
-            >
-              <span class="material-symbols-outlined">settings</span>
-            </button>
-            <div
-              class="w-10 h-10 rounded-full border-2 border-primary overflow-hidden ml-2"
-            >
-              <img
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5om6V1zebYWkkOWDpJ-SSUbUCPmsdyDKyx1h19H81LKuUA_0zEsXILVQ4R0sbbDkQqLU6gWjnU5dwbzaFM27UP73Ew64qKNeLUibvtfaKseFaLlA9Y3uvPaWH-eJw50BWRlhL0kJfzSTOBuyQgjpLhruUzI9MZlRAdbu3zje7j5d886dLVSQuIsVHoXotlMiPKWogvV9AaXzU-AEZS8sPqmoIna7Ia74ZZWjxZoboxYFfRfHS86kb-M3fMgPHmuMqrtzrtHEgDW2K"
-                alt="User Profile"
-                class="w-full h-full object-cover"
-              />
-            </div>
-          </div>
-        </div>
       </header>
 
-      <div class="p-4 md:p-8 lg:p-10 space-y-8 max-w-[1400px] mx-auto">
-        <div
-          class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+      <div class="p-4 md:p-8 lg:p-10 max-w-[1400px] mx-auto">
+        <section
+          class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8"
         >
           <div>
             <h2 class="font-display-lg text-3xl md:text-4xl text-primary">
@@ -269,152 +163,59 @@
               Manage physical locations, capacities, and technical amenities.
             </p>
           </div>
-
-          <!-- ADDED ID TO TRIGGER BUTTON HERE -->
           <button
             id="addRoomBtn"
             class="bg-primary text-on-primary font-label-md py-3 px-6 rounded-lg offset-shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
           >
-            <span class="material-symbols-outlined">add_circle</span>
-            Add Room
+            <span class="material-symbols-outlined">add_circle</span> Add Room
           </button>
+        </section>
+
+        <!-- Dynamic Department Indicator -->
+        <div
+          class="flex justify-between items-center mb-6 pb-2 border-b-2 border-surface-variant"
+        >
+          <p class="font-label-md text-on-surface-variant">
+            Showing rooms for:
+            <strong id="currentDeptDisplay" class="text-primary"
+              >Loading...</strong
+            >
+          </p>
         </div>
 
-        <div class="flex flex-col md:flex-row gap-4 max-w-2xl">
+        <div class="flex flex-col md:flex-row gap-4 max-w-2xl mb-8">
           <div
             class="relative bg-white hand-drawn-border-sm offset-shadow-sm flex items-center p-2 flex-grow"
           >
-            <span class="pl-3 flex items-center text-on-surface-variant">
-              <span class="material-symbols-outlined">search</span>
-            </span>
+            <span class="pl-3 flex items-center text-on-surface-variant"
+              ><span class="material-symbols-outlined">search</span></span
+            >
             <input
               type="text"
               placeholder="Search rooms by name or type..."
               class="w-full bg-transparent border-none focus:ring-0 text-body-md px-3 py-2"
             />
           </div>
-          <button
-            class="bg-white hand-drawn-border-sm offset-shadow-sm px-6 py-2 flex items-center justify-center gap-2 hover:bg-surface-container transition-colors"
-          >
-            <span class="material-symbols-outlined text-primary"
-              >filter_list</span
-            >
-            <span class="font-label-md text-primary">Filter</span>
-          </button>
         </div>
 
         <div
           id="mainRoomsGrid"
           class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-8"
         >
-          <!-- Keep existing room cards untouched -->
-          <!-- <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col justify-between hover:-translate-y-1 transition-transform min-h-[220px]">
-                    <div>
-                        <div class="flex justify-between items-start mb-2">
-                            <h4 class="font-headline-md text-xl text-primary leading-tight">Lecture Hall 101</h4>
-                        </div>
-                        <p class="text-label-md text-on-surface-variant mb-6">Capacity: 120</p>
-                        
-                        <div class="flex gap-4 mb-6 text-primary opacity-80">
-                            <span class="material-symbols-outlined text-[24px]" title="Projector">videocam</span>
-                            <span class="material-symbols-outlined text-[24px]" title="Air Conditioning">ac_unit</span>
-                            <span class="material-symbols-outlined text-[24px]" title="Whiteboard">edit_note</span>
-                            <span class="material-symbols-outlined text-[24px]" title="Computers">computer</span>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between mt-auto pt-4 border-t border-surface-variant">
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container text-label-sm border border-primary">
-                            Occupied
-                        </span>
-                        <span class="text-label-sm text-on-surface-variant font-bold">Batch CS2024</span>
-                    </div>
-                </article>
-                <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col justify-between hover:-translate-y-1 transition-transform min-h-[220px]">
-                    <div>
-                        <div class="flex justify-between items-start mb-2">
-                            <h4 class="font-headline-md text-xl text-primary leading-tight">Physics Lab 2A</h4>
-                        </div>
-                        <p class="text-label-md text-on-surface-variant mb-6">Capacity: 120</p>
-                        
-                        <div class="flex gap-4 mb-6 text-primary opacity-80">
-                            <span class="material-symbols-outlined text-[24px]" title="Projector">videocam</span>
-                            <span class="material-symbols-outlined text-[24px]" title="Air Conditioning">ac_unit</span>
-                            <span class="material-symbols-outlined text-[24px]" title="Whiteboard">edit_note</span>
-                            <span class="material-symbols-outlined text-[24px]" title="Computers">computer</span>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between mt-auto pt-4 border-t border-surface-variant">
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-label-sm border border-primary">
-                            <span class="material-symbols-outlined text-[16px]">check_circle</span>
-                            Available
-                        </span>
-                    </div>
-                </article> -->
+          <!-- Rooms injected here -->
         </div>
       </div>
     </main>
 
-    <!-- Bottom Navigation Mobile -->
-    <nav
-      class="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t-2 border-primary px-2 py-3 flex justify-around items-center z-40 shadow-[0px_-4px_10px_rgba(0,0,0,0.05)]"
-    >
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
-      >
-        <span class="material-symbols-outlined">dashboard</span>
-        <span class="font-label-sm text-[10px]">Home</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-primary font-bold"
-      >
-        <span class="material-symbols-outlined">meeting_room</span>
-        <span class="font-label-sm text-[10px]">Rooms</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant relative -top-5"
-      >
-        <div
-          class="bg-primary text-on-primary p-3 md:p-4 rounded-full border-2 border-surface shadow-[0_4px_0_0_#181919] hover:-translate-y-1 transition-transform"
-        >
-          <span class="material-symbols-outlined text-xl">add</span>
-        </div>
-        <span
-          class="font-label-sm text-[10px] absolute -bottom-4 text-primary font-bold"
-          >Create</span
-        >
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
-      >
-        <span class="material-symbols-outlined">groups</span>
-        <span class="font-label-sm text-[10px]">Batches</span>
-      </a>
-      <a
-        href="#"
-        class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors"
-      >
-        <span class="material-symbols-outlined">school</span>
-        <span class="font-label-sm text-[10px]">Staff</span>
-      </a>
-    </nav>
-
-    <!-- ============================================== -->
     <!-- ADD ROOM MODAL POPUP -->
-    <!-- ============================================== -->
     <div
       id="addRoomModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm opacity-0 hidden transition-opacity duration-300"
     >
-      <!-- Modal Content Container -->
       <div
         id="addRoomModalContent"
         class="bg-surface w-[90%] max-w-lg hand-drawn-border-sm offset-shadow-sm p-6 md:p-8 transform scale-95 transition-transform duration-300 relative max-h-[90vh] overflow-y-auto"
       >
-        <!-- Header -->
         <div class="flex justify-between items-center mb-6">
           <h3 class="font-headline-md text-2xl text-primary">Add New Room</h3>
           <button
@@ -425,9 +226,27 @@
           </button>
         </div>
 
-        <!-- Form -->
         <form id="newRoomForm" class="space-y-6">
-          <!-- Text Input: Room Name -->
+          <!-- Department Dropdown -->
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Department <span class="text-error">*</span></label
+            >
+            <div class="relative">
+              <select
+                id="roomDept"
+                required
+                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+              >
+                <option value="" disabled selected>Select Department...</option>
+              </select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                >expand_more</span
+              >
+            </div>
+          </div>
+
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
               >Room Name <span class="text-error">*</span></label
@@ -437,11 +256,10 @@
               id="roomName"
               required
               placeholder="e.g., Seminar Room 402"
-              class="bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container transition-shadow font-body-md w-full placeholder-outline-variant"
+              class="w-full bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container transition-shadow font-body-md"
             />
           </div>
 
-          <!-- Number Input: Capacity -->
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
               >Capacity <span class="text-error">*</span></label
@@ -450,19 +268,19 @@
               type="number"
               id="roomCapacity"
               required
+              min="1"
               placeholder="Enter max seating..."
-              class="bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container transition-shadow font-body-md w-full placeholder-outline-variant"
+              class="w-full bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container transition-shadow font-body-md"
             />
           </div>
 
-          <!-- Radio Buttons: Room Type -->
           <div class="flex flex-col gap-3">
             <label class="font-label-md text-primary font-bold"
               >Room Type <span class="text-error">*</span></label
             >
             <div class="grid grid-cols-2 gap-3">
-              <label class="cursor-pointer relative">
-                <input
+              <label class="cursor-pointer relative"
+                ><input
                   type="radio"
                   name="roomType"
                   value="Lecture Hall"
@@ -473,10 +291,10 @@
                   class="px-4 py-3 border-2 border-primary rounded-lg text-center font-label-md peer-checked:bg-secondary-container peer-checked:offset-shadow-sm transition-all hover:bg-surface-container-low"
                 >
                   Lecture Hall
-                </div>
-              </label>
-              <label class="cursor-pointer relative">
-                <input
+                </div></label
+              >
+              <label class="cursor-pointer relative"
+                ><input
                   type="radio"
                   name="roomType"
                   value="Laboratory"
@@ -486,10 +304,10 @@
                   class="px-4 py-3 border-2 border-primary rounded-lg text-center font-label-md peer-checked:bg-secondary-container peer-checked:offset-shadow-sm transition-all hover:bg-surface-container-low"
                 >
                   Laboratory
-                </div>
-              </label>
-              <label class="cursor-pointer relative">
-                <input
+                </div></label
+              >
+              <label class="cursor-pointer relative"
+                ><input
                   type="radio"
                   name="roomType"
                   value="Seminar Room"
@@ -499,10 +317,10 @@
                   class="px-4 py-3 border-2 border-primary rounded-lg text-center font-label-md peer-checked:bg-secondary-container peer-checked:offset-shadow-sm transition-all hover:bg-surface-container-low"
                 >
                   Seminar Room
-                </div>
-              </label>
-              <label class="cursor-pointer relative">
-                <input
+                </div></label
+              >
+              <label class="cursor-pointer relative"
+                ><input
                   type="radio"
                   name="roomType"
                   value="Auditorium"
@@ -512,19 +330,18 @@
                   class="px-4 py-3 border-2 border-primary rounded-lg text-center font-label-md peer-checked:bg-secondary-container peer-checked:offset-shadow-sm transition-all hover:bg-surface-container-low"
                 >
                   Auditorium
-                </div>
-              </label>
+                </div></label
+              >
             </div>
           </div>
 
-          <!-- Checkboxes: Amenities Styled as Toggle Pills -->
           <div class="flex flex-col gap-3">
             <label class="font-label-md text-primary font-bold"
               >Amenities</label
             >
             <div class="flex flex-wrap gap-3">
-              <label class="cursor-pointer">
-                <input
+              <label class="cursor-pointer"
+                ><input
                   type="checkbox"
                   name="amenity"
                   value="Projector"
@@ -535,12 +352,11 @@
                 >
                   <span class="material-symbols-outlined text-[20px]"
                     >videocam</span
-                  >
-                  Projector
-                </div>
-              </label>
-              <label class="cursor-pointer">
-                <input
+                  >Projector
+                </div></label
+              >
+              <label class="cursor-pointer"
+                ><input
                   type="checkbox"
                   name="amenity"
                   value="AC"
@@ -551,12 +367,11 @@
                 >
                   <span class="material-symbols-outlined text-[20px]"
                     >ac_unit</span
-                  >
-                  AC
-                </div>
-              </label>
-              <label class="cursor-pointer">
-                <input
+                  >AC
+                </div></label
+              >
+              <label class="cursor-pointer"
+                ><input
                   type="checkbox"
                   name="amenity"
                   value="Whiteboard"
@@ -567,12 +382,11 @@
                 >
                   <span class="material-symbols-outlined text-[20px]"
                     >edit_note</span
-                  >
-                  Whiteboard
-                </div>
-              </label>
-              <label class="cursor-pointer">
-                <input
+                  >Whiteboard
+                </div></label
+              >
+              <label class="cursor-pointer"
+                ><input
                   type="checkbox"
                   name="amenity"
                   value="Computers"
@@ -583,14 +397,12 @@
                 >
                   <span class="material-symbols-outlined text-[20px]"
                     >computer</span
-                  >
-                  Computers
-                </div>
-              </label>
+                  >Computers
+                </div></label
+              >
             </div>
           </div>
 
-          <!-- Actions -->
           <div class="flex justify-end items-center gap-4 pt-4">
             <button
               type="button"
@@ -601,6 +413,7 @@
             </button>
             <button
               type="submit"
+              id="saveRoomBtn"
               class="bg-primary text-on-primary font-label-md py-3 px-8 rounded-lg offset-shadow-sm active:scale-95 transition-all flex items-center gap-2"
             >
               <span class="material-symbols-outlined text-[20px]">save</span>
@@ -608,9 +421,11 @@
             </button>
           </div>
         </form>
+        <div id="addStatusMessage" class="mt-4 font-label-md hidden"></div>
       </div>
     </div>
 
+    <!-- EDIT ROOM MODAL -->
     <div
       id="editRoomModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm opacity-0 hidden transition-opacity duration-300"
@@ -631,6 +446,24 @@
         </div>
 
         <form id="editRoomForm" class="space-y-6">
+          <!-- Department Dropdown -->
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Department <span class="text-error">*</span></label
+            >
+            <div class="relative">
+              <select
+                id="editRoomDept"
+                required
+                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+              ></select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                >expand_more</span
+              >
+            </div>
+          </div>
+
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
               >Room Name <span class="text-error">*</span></label
@@ -639,7 +472,7 @@
               type="text"
               id="editRoomName"
               required
-              class="bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container transition-shadow font-body-md w-full"
+              class="bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container w-full"
             />
           </div>
 
@@ -651,7 +484,8 @@
               type="number"
               id="editRoomCapacity"
               required
-              class="bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container transition-shadow font-body-md w-full"
+              min="1"
+              class="bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container w-full"
             />
           </div>
 
@@ -660,8 +494,8 @@
               >Room Type <span class="text-error">*</span></label
             >
             <div class="grid grid-cols-2 gap-3">
-              <label class="cursor-pointer relative">
-                <input
+              <label class="cursor-pointer relative"
+                ><input
                   type="radio"
                   name="editRoomType"
                   value="Lecture Hall"
@@ -671,10 +505,10 @@
                   class="px-4 py-3 border-2 border-primary rounded-lg text-center font-label-md peer-checked:bg-secondary-container peer-checked:offset-shadow-sm transition-all hover:bg-surface-container-low"
                 >
                   Lecture Hall
-                </div>
-              </label>
-              <label class="cursor-pointer relative">
-                <input
+                </div></label
+              >
+              <label class="cursor-pointer relative"
+                ><input
                   type="radio"
                   name="editRoomType"
                   value="Laboratory"
@@ -684,10 +518,10 @@
                   class="px-4 py-3 border-2 border-primary rounded-lg text-center font-label-md peer-checked:bg-secondary-container peer-checked:offset-shadow-sm transition-all hover:bg-surface-container-low"
                 >
                   Laboratory
-                </div>
-              </label>
-              <label class="cursor-pointer relative">
-                <input
+                </div></label
+              >
+              <label class="cursor-pointer relative"
+                ><input
                   type="radio"
                   name="editRoomType"
                   value="Seminar Room"
@@ -697,10 +531,10 @@
                   class="px-4 py-3 border-2 border-primary rounded-lg text-center font-label-md peer-checked:bg-secondary-container peer-checked:offset-shadow-sm transition-all hover:bg-surface-container-low"
                 >
                   Seminar Room
-                </div>
-              </label>
-              <label class="cursor-pointer relative">
-                <input
+                </div></label
+              >
+              <label class="cursor-pointer relative"
+                ><input
                   type="radio"
                   name="editRoomType"
                   value="Auditorium"
@@ -710,8 +544,8 @@
                   class="px-4 py-3 border-2 border-primary rounded-lg text-center font-label-md peer-checked:bg-secondary-container peer-checked:offset-shadow-sm transition-all hover:bg-surface-container-low"
                 >
                   Auditorium
-                </div>
-              </label>
+                </div></label
+              >
             </div>
           </div>
 
@@ -720,8 +554,8 @@
               >Amenities</label
             >
             <div class="flex flex-wrap gap-3">
-              <label class="cursor-pointer">
-                <input
+              <label class="cursor-pointer"
+                ><input
                   type="checkbox"
                   name="editAmenity"
                   value="Projector"
@@ -732,12 +566,11 @@
                 >
                   <span class="material-symbols-outlined text-[20px]"
                     >videocam</span
-                  >
-                  Projector
-                </div>
-              </label>
-              <label class="cursor-pointer">
-                <input
+                  >Projector
+                </div></label
+              >
+              <label class="cursor-pointer"
+                ><input
                   type="checkbox"
                   name="editAmenity"
                   value="AC"
@@ -748,12 +581,11 @@
                 >
                   <span class="material-symbols-outlined text-[20px]"
                     >ac_unit</span
-                  >
-                  AC
-                </div>
-              </label>
-              <label class="cursor-pointer">
-                <input
+                  >AC
+                </div></label
+              >
+              <label class="cursor-pointer"
+                ><input
                   type="checkbox"
                   name="editAmenity"
                   value="Whiteboard"
@@ -764,12 +596,11 @@
                 >
                   <span class="material-symbols-outlined text-[20px]"
                     >edit_note</span
-                  >
-                  Whiteboard
-                </div>
-              </label>
-              <label class="cursor-pointer">
-                <input
+                  >Whiteboard
+                </div></label
+              >
+              <label class="cursor-pointer"
+                ><input
                   type="checkbox"
                   name="editAmenity"
                   value="Computers"
@@ -780,10 +611,9 @@
                 >
                   <span class="material-symbols-outlined text-[20px]"
                     >computer</span
-                  >
-                  Computers
-                </div>
-              </label>
+                  >Computers
+                </div></label
+              >
             </div>
           </div>
 
@@ -793,8 +623,7 @@
             <div class="flex flex-col">
               <span class="font-label-md text-primary font-bold"
                 >Room Status</span
-              >
-              <span class="text-label-sm text-on-surface-variant"
+              ><span class="text-label-sm text-on-surface-variant"
                 >Toggle off for maintenance</span
               >
             </div>
@@ -821,7 +650,6 @@
               <span class="material-symbols-outlined text-[20px]">delete</span>
               Delete
             </button>
-
             <div class="flex items-center gap-4">
               <button
                 type="button"
@@ -832,6 +660,7 @@
               </button>
               <button
                 type="submit"
+                id="updateRoomBtn"
                 class="bg-primary text-on-primary font-label-md py-3 px-8 rounded-lg offset-shadow-sm active:scale-95 transition-all flex items-center gap-2"
               >
                 <span class="material-symbols-outlined text-[20px]"
@@ -842,101 +671,128 @@
             </div>
           </div>
         </form>
+        <div id="editStatusMessage" class="mt-4 font-label-md hidden"></div>
       </div>
     </div>
-    <!-- JS for Modal Interaction -->
-    <!-- JS for API & Modal Interaction -->
+
+    <!-- MAIN SCRIPT -->
     <script>
       const API_URL = "http://127.0.0.1:8000";
-      const CURRENT_DEPT_ID = 1; // Defaulting to Computer Science
+      let CURRENT_DEPT_ID = null;
 
-      // We need a global dictionary to hold the room data so the edit modal can read it
       let globalRoomsData = {};
       let currentlyEditingRoomId = null;
 
-      document.addEventListener("DOMContentLoaded", () => {
-        // Add Modal Variables
-        const addModal = document.getElementById("addRoomModal");
-        const addModalContent = document.getElementById("addRoomModalContent");
-        const addRoomBtn = document.getElementById("addRoomBtn");
-        const newRoomForm = document.getElementById("newRoomForm");
+      const roomsGrid = document.getElementById("mainRoomsGrid");
+      const currentDeptDisplay = document.getElementById("currentDeptDisplay");
 
-        // Edit Modal Variables
-        const editModal = document.getElementById("editRoomModal");
-        const editModalContent = document.getElementById(
-          "editRoomModalContent",
-        );
-        const editRoomForm = document.getElementById("editRoomForm");
-        const roomsGrid = document.getElementById("mainRoomsGrid");
+      const addModal = document.getElementById("addRoomModal");
+      const editModal = document.getElementById("editRoomModal");
 
-        // --- 1. FETCH AND RENDER ROOMS ---
-        async function fetchRooms() {
-          try {
-            const response = await fetch(
-              `${API_URL}/get-rooms/${CURRENT_DEPT_ID}`,
-            );
-            const data = await response.json();
+      // --- FETCH DATA FOR DROPDOWNS ---
+      async function loadDropdownData() {
+        try {
+          const deptRes = await fetch(`${API_URL}/get-departments/`);
+          const deptData = await deptRes.json();
+          const deptSelects = [
+            document.getElementById("roomDept"),
+            document.getElementById("editRoomDept"),
+          ];
 
-            roomsGrid.innerHTML = "";
-            globalRoomsData = {}; // Reset our dictionary
-
-            data.data.forEach((room) => {
-              globalRoomsData[room.id] = room; // Save room to dictionary for editing
-
-              let amenitiesHtml = "";
-              if (room.has_projector)
-                amenitiesHtml += `<span class="material-symbols-outlined text-[24px]" title="Projector">videocam</span>`;
-              if (room.has_ac)
-                amenitiesHtml += `<span class="material-symbols-outlined text-[24px]" title="Air Conditioning">ac_unit</span>`;
-              if (room.has_whiteboard)
-                amenitiesHtml += `<span class="material-symbols-outlined text-[24px]" title="Whiteboard">edit_note</span>`;
-              if (room.has_computers)
-                amenitiesHtml += `<span class="material-symbols-outlined text-[24px]" title="Computers">computer</span>`;
-              if (amenitiesHtml === "")
-                amenitiesHtml = `<span class="text-label-sm text-on-surface-variant italic">No special amenities</span>`;
-
-              // EDIT ICON ADDED TO THE HEADER OF THE CARD HERE
-              const roomCard = `
-                <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col justify-between hover:-translate-y-1 transition-transform min-h-[220px]">
-                    <div>
-                        <div class="flex justify-between items-start mb-2">
-                            <h4 class="font-headline-md text-xl text-primary leading-tight">${room.name}</h4>
-                            <button onclick="openEditModal(${room.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Room">
-                                <span class="material-symbols-outlined text-[20px]">edit</span>
-                            </button>
-                        </div> 
-                        <hr class="border-t border-surface-variant my-2">
-                        <p class="text-label-md text-on-surface-variant mb-2">${room.room_type}</p>
-                        <p class="text-label-md text-on-surface-variant mb-4">Capacity: ${room.capacity}</p>
-                        <div class="flex gap-4 mb-4 text-primary opacity-80">${amenitiesHtml}</div>
-                    </div>
-                    <div class="flex items-center justify-between mt-auto pt-4 border-t border-surface-variant">
-                        ${
-                          room.is_active
-                            ? `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-label-sm border border-primary"><span class="material-symbols-outlined text-[16px]">check_circle</span> Available</span>`
-                            : `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container text-label-sm border border-primary"><span class="material-symbols-outlined text-[16px]">build</span> Maintenance</span>`
-                        }
-                    </div>
-                </article>
-              `;
-              roomsGrid.innerHTML += roomCard;
-            });
-          } catch (error) {
-            console.error("Failed to fetch rooms:", error);
+          if (deptData.data.length > 0 && CURRENT_DEPT_ID === null) {
+            CURRENT_DEPT_ID = deptData.data[0].id;
+            currentDeptDisplay.innerText = deptData.data[0].name;
           }
+
+          deptData.data.forEach((dept) => {
+            const opt = `<option value="${dept.id}">${dept.name}</option>`;
+            deptSelects.forEach((sel) => (sel.innerHTML += opt));
+          });
+        } catch (err) {
+          console.error("Failed to load departments", err);
+        }
+      }
+
+      // --- FETCH ROOMS ---
+      async function fetchRooms() {
+        if (!CURRENT_DEPT_ID) {
+          roomsGrid.innerHTML = `<p class="text-on-surface-variant italic col-span-full">Please create a department first.</p>`;
+          return;
         }
 
-        fetchRooms();
+        try {
+          const response = await fetch(
+            `${API_URL}/get-rooms/${CURRENT_DEPT_ID}`,
+          );
+          const data = await response.json();
 
-        // --- 2. ADD ROOM LOGIC (Unchanged) ---
-        newRoomForm.addEventListener("submit", async (e) => {
+          roomsGrid.innerHTML = "";
+          globalRoomsData = {};
+
+          if (data.data.length === 0) {
+            roomsGrid.innerHTML = `<p class="text-on-surface-variant italic col-span-full">No rooms found for this department.</p>`;
+            return;
+          }
+
+          data.data.forEach((room) => {
+            globalRoomsData[room.id] = room;
+
+            let amenitiesHtml = "";
+            if (room.has_projector)
+              amenitiesHtml += `<span class="material-symbols-outlined text-[24px]" title="Projector">videocam</span>`;
+            if (room.has_ac)
+              amenitiesHtml += `<span class="material-symbols-outlined text-[24px]" title="Air Conditioning">ac_unit</span>`;
+            if (room.has_whiteboard)
+              amenitiesHtml += `<span class="material-symbols-outlined text-[24px]" title="Whiteboard">edit_note</span>`;
+            if (room.has_computers)
+              amenitiesHtml += `<span class="material-symbols-outlined text-[24px]" title="Computers">computer</span>`;
+            if (amenitiesHtml === "")
+              amenitiesHtml = `<span class="text-label-sm text-on-surface-variant italic">No special amenities</span>`;
+
+            const roomCard = `
+              <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col justify-between hover:-translate-y-1 transition-transform min-h-[220px]">
+                  <div>
+                      <div class="flex justify-between items-start mb-2">
+                          <h4 class="font-headline-md text-xl text-primary leading-tight">${room.name}</h4>
+                          <button onclick="openEditModal(${room.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Room">
+                              <span class="material-symbols-outlined text-[20px]">edit</span>
+                          </button>
+                      </div> 
+                      <hr class="border-t border-surface-variant my-2">
+                      <p class="text-label-md text-on-surface-variant mb-2">${room.room_type}</p>
+                      <p class="text-label-md text-on-surface-variant mb-4">Capacity: ${room.capacity}</p>
+                      <div class="flex gap-4 mb-4 text-primary opacity-80">${amenitiesHtml}</div>
+                  </div>
+                  <div class="flex items-center justify-between mt-auto pt-4 border-t border-surface-variant">
+                      ${
+                        room.is_active
+                          ? `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-label-sm border border-primary"><span class="material-symbols-outlined text-[16px]">check_circle</span> Available</span>`
+                          : `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container text-label-sm border border-primary"><span class="material-symbols-outlined text-[16px]">build</span> Maintenance</span>`
+                      }
+                  </div>
+              </article>
+            `;
+            roomsGrid.innerHTML += roomCard;
+          });
+        } catch (error) {
+          console.error("Failed to fetch rooms:", error);
+        }
+      }
+
+      // --- ADD ROOM ---
+      document
+        .getElementById("newRoomForm")
+        .addEventListener("submit", async (e) => {
           e.preventDefault();
-          const submitBtn = e.target.querySelector('button[type="submit"]');
-          const originalBtnContent = submitBtn.innerHTML;
-          submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">sync</span> Waking Database...`;
+          const submitBtn = document.getElementById("saveRoomBtn");
+          const statusMsg = document.getElementById("addStatusMessage");
+
           submitBtn.disabled = true;
+          submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">sync</span> Saving...`;
+          statusMsg.classList.add("hidden");
 
           const roomData = {
+            department_id: parseInt(document.getElementById("roomDept").value),
             name: document.getElementById("roomName").value,
             capacity: parseInt(document.getElementById("roomCapacity").value),
             room_type:
@@ -946,7 +802,6 @@
               document.querySelectorAll('input[name="amenity"]:checked'),
             ).map((cb) => cb.value),
             is_active: true,
-            department_id: CURRENT_DEPT_ID,
           };
 
           try {
@@ -955,71 +810,90 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(roomData),
             });
+
+            const result = await response.json();
+
             if (response.ok) {
-              await fetchRooms();
-              closeAddModal();
-              newRoomForm.reset();
+              statusMsg.className =
+                "mt-4 font-label-md text-tertiary-container";
+              statusMsg.innerText = "✅ Room added successfully!";
+
+              // Switch view
+              CURRENT_DEPT_ID = roomData.department_id;
+              const selectEl = document.getElementById("roomDept");
+              currentDeptDisplay.innerText =
+                selectEl.options[selectEl.selectedIndex].text;
+
+              document.getElementById("newRoomForm").reset();
+              fetchRooms();
+              setTimeout(closeAddModal, 1000);
             } else {
-              const res = await response.json();
-              alert("Error adding room: " + (res.detail || res.message));
+              statusMsg.className = "mt-4 font-label-md text-error";
+              statusMsg.innerText = "⚠️ " + result.detail;
             }
           } catch (error) {
-            alert("Failed to connect to backend.");
+            statusMsg.className = "mt-4 font-label-md text-error";
+            statusMsg.innerText = "❌ Server offline.";
           } finally {
-            submitBtn.innerHTML = originalBtnContent;
             submitBtn.disabled = false;
+            submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">save</span> Save Room`;
+            statusMsg.classList.remove("hidden");
           }
         });
 
-        // --- 3. EDIT ROOM LOGIC ---
-        // Expose openEditModal to the global window so the inline onclick works
-        window.openEditModal = (id) => {
-          currentlyEditingRoomId = id;
-          const room = globalRoomsData[id];
+      // --- EDIT ROOM ---
+      window.openEditModal = (id) => {
+        currentlyEditingRoomId = id;
+        const room = globalRoomsData[id];
 
-          // Populate Text Inputs
-          document.getElementById("editRoomName").value = room.name;
-          document.getElementById("editRoomCapacity").value = room.capacity;
+        document.getElementById("editRoomDept").value = room.department_id;
+        document.getElementById("editRoomName").value = room.name;
+        document.getElementById("editRoomCapacity").value = room.capacity;
 
-          // Populate Radio Button
-          const typeRadio = document.querySelector(
-            `input[name="editRoomType"][value="${room.room_type}"]`,
-          );
-          if (typeRadio) typeRadio.checked = true;
+        const typeRadio = document.querySelector(
+          `input[name="editRoomType"][value="${room.room_type}"]`,
+        );
+        if (typeRadio) typeRadio.checked = true;
 
-          // Populate Checkboxes
-          document.querySelector(
-            'input[name="editAmenity"][value="Projector"]',
-          ).checked = room.has_projector;
-          document.querySelector(
-            'input[name="editAmenity"][value="AC"]',
-          ).checked = room.has_ac;
-          document.querySelector(
-            'input[name="editAmenity"][value="Whiteboard"]',
-          ).checked = room.has_whiteboard;
-          document.querySelector(
-            'input[name="editAmenity"][value="Computers"]',
-          ).checked = room.has_computers;
+        document.querySelector(
+          'input[name="editAmenity"][value="Projector"]',
+        ).checked = room.has_projector;
+        document.querySelector(
+          'input[name="editAmenity"][value="AC"]',
+        ).checked = room.has_ac;
+        document.querySelector(
+          'input[name="editAmenity"][value="Whiteboard"]',
+        ).checked = room.has_whiteboard;
+        document.querySelector(
+          'input[name="editAmenity"][value="Computers"]',
+        ).checked = room.has_computers;
 
-          // Populate Maintenance Toggle
-          document.getElementById("editRoomIsActive").checked = room.is_active;
+        document.getElementById("editRoomIsActive").checked = room.is_active;
 
-          // Show Modal
-          editModal.classList.remove("hidden");
-          setTimeout(() => {
-            editModal.classList.remove("opacity-0");
-            editModalContent.classList.remove("scale-95");
-          }, 10);
-        };
+        editModal.classList.remove("hidden");
+        setTimeout(() => {
+          editModal.classList.remove("opacity-0");
+          document
+            .getElementById("editRoomModalContent")
+            .classList.remove("scale-95");
+        }, 10);
+      };
 
-        editRoomForm.addEventListener("submit", async (e) => {
+      document
+        .getElementById("editRoomForm")
+        .addEventListener("submit", async (e) => {
           e.preventDefault();
-          const submitBtn = e.target.querySelector('button[type="submit"]');
-          const originalBtnContent = submitBtn.innerHTML;
-          submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">sync</span> Updating...`;
+          const submitBtn = document.getElementById("updateRoomBtn");
+          const statusMsg = document.getElementById("editStatusMessage");
+
           submitBtn.disabled = true;
+          submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">sync</span> Updating...`;
+          statusMsg.classList.add("hidden");
 
           const roomData = {
+            department_id: parseInt(
+              document.getElementById("editRoomDept").value,
+            ),
             name: document.getElementById("editRoomName").value,
             capacity: parseInt(
               document.getElementById("editRoomCapacity").value,
@@ -1031,7 +905,6 @@
               document.querySelectorAll('input[name="editAmenity"]:checked'),
             ).map((cb) => cb.value),
             is_active: document.getElementById("editRoomIsActive").checked,
-            department_id: CURRENT_DEPT_ID,
           };
 
           try {
@@ -1043,110 +916,108 @@
                 body: JSON.stringify(roomData),
               },
             );
+            const result = await response.json();
 
             if (response.ok) {
-              await fetchRooms();
+              CURRENT_DEPT_ID = roomData.department_id;
+              const selectEl = document.getElementById("editRoomDept");
+              currentDeptDisplay.innerText =
+                selectEl.options[selectEl.selectedIndex].text;
+
+              fetchRooms();
+              closeEditModal();
+            } else {
+              statusMsg.className = "mt-4 font-label-md text-error";
+              statusMsg.innerText = "⚠️ " + result.detail;
+            }
+          } catch (error) {
+            statusMsg.className = "mt-4 font-label-md text-error";
+            statusMsg.innerText = "❌ Server offline.";
+          } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">update</span> Update`;
+            statusMsg.classList.remove("hidden");
+          }
+        });
+
+      // --- DELETE ROOM ---
+      document
+        .getElementById("deleteRoomBtn")
+        .addEventListener("click", async () => {
+          const roomName = globalRoomsData[currentlyEditingRoomId].name;
+          if (!confirm(`Delete ${roomName}?`)) return;
+
+          try {
+            const response = await fetch(
+              `${API_URL}/delete-room/${currentlyEditingRoomId}`,
+              { method: "DELETE" },
+            );
+            if (response.ok) {
+              fetchRooms();
               closeEditModal();
             } else {
               const res = await response.json();
-              alert("Error updating room: " + (res.detail || res.message));
+              alert("Error: " + (res.detail || res.message));
             }
           } catch (error) {
             alert("Failed to connect to backend.");
-          } finally {
-            submitBtn.innerHTML = originalBtnContent;
-            submitBtn.disabled = false;
           }
         });
 
-        // --- 4. DELETE ROOM LOGIC ---
-        const deleteRoomBtn = document.getElementById("deleteRoomBtn");
-
-        deleteRoomBtn.addEventListener("click", async () => {
-          // 1. Safety Check: Ask the user to confirm
-          const roomName = globalRoomsData[currentlyEditingRoomId].name;
-          const isConfirmed = confirm(
-            `Are you absolutely sure you want to delete ${roomName}?\nThis action cannot be undone.`,
-          );
-
-          if (!isConfirmed) return; // Stop if they click cancel
-
-          // 2. UX: Change button to loading state
-          const originalBtnContent = deleteRoomBtn.innerHTML;
-          deleteRoomBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">sync</span> Deleting...`;
-          deleteRoomBtn.disabled = true;
-
-          try {
-            // 3. Send DELETE request to Python
-            const response = await fetch(
-              `${API_URL}/delete-room/${currentlyEditingRoomId}`,
-              {
-                method: "DELETE",
-              },
-            );
-
-            if (response.ok) {
-              await fetchRooms(); // Refresh the grid
-              closeEditModal(); // Close the popup
-            } else {
-              const res = await response.json();
-              alert("Error deleting room: " + (res.detail || res.message));
-            }
-          } catch (error) {
-            console.error("API Error:", error);
-            alert("Failed to connect to backend.");
-          } finally {
-            // 4. Reset button (in case it failed and stays open)
-            deleteRoomBtn.innerHTML = originalBtnContent;
-            deleteRoomBtn.disabled = false;
-          }
-        });
-
-        // --- UI MODAL ANIMATIONS ---
-        const closeAddModal = () => {
-          addModal.classList.add("opacity-0");
-          addModalContent.classList.add("scale-95");
-          setTimeout(() => addModal.classList.add("hidden"), 300);
-        };
-
-        const closeEditModal = () => {
-          editModal.classList.add("opacity-0");
-          editModalContent.classList.add("scale-95");
-          setTimeout(() => editModal.classList.add("hidden"), 300);
-        };
-
-        addRoomBtn.addEventListener("click", (e) => {
-          e.preventDefault();
-          addModal.classList.remove("hidden");
-          setTimeout(() => {
-            addModal.classList.remove("opacity-0");
-            addModalContent.classList.remove("scale-95");
-          }, 10);
-        });
-
-        // Bind Add Modal Closes
+      // --- MODAL CONTROLS ---
+      const closeAddModal = () => {
+        addModal.classList.add("opacity-0");
         document
-          .getElementById("closeModalBtn")
-          .addEventListener("click", closeAddModal);
-        document
-          .getElementById("cancelModalBtn")
-          .addEventListener("click", closeAddModal);
-        addModal.addEventListener("click", (e) => {
-          if (e.target === addModal) closeAddModal();
-        });
+          .getElementById("addRoomModalContent")
+          .classList.add("scale-95");
+        setTimeout(() => addModal.classList.add("hidden"), 300);
+        document.getElementById("addStatusMessage").classList.add("hidden");
+      };
 
-        // Bind Edit Modal Closes
+      const closeEditModal = () => {
+        editModal.classList.add("opacity-0");
         document
-          .getElementById("closeEditModalBtn")
-          .addEventListener("click", closeEditModal);
-        document
-          .getElementById("cancelEditModalBtn")
-          .addEventListener("click", closeEditModal);
-        editModal.addEventListener("click", (e) => {
-          if (e.target === editModal) closeEditModal();
-        });
+          .getElementById("editRoomModalContent")
+          .classList.add("scale-95");
+        setTimeout(() => editModal.classList.add("hidden"), 300);
+        document.getElementById("editStatusMessage").classList.add("hidden");
+      };
+
+      document.getElementById("addRoomBtn").addEventListener("click", () => {
+        addModal.classList.remove("hidden");
+        setTimeout(() => {
+          addModal.classList.remove("opacity-0");
+          document
+            .getElementById("addRoomModalContent")
+            .classList.remove("scale-95");
+        }, 10);
+      });
+
+      document
+        .getElementById("closeModalBtn")
+        .addEventListener("click", closeAddModal);
+      document
+        .getElementById("cancelModalBtn")
+        .addEventListener("click", closeAddModal);
+      addModal.addEventListener("click", (e) => {
+        if (e.target === addModal) closeAddModal();
+      });
+
+      document
+        .getElementById("closeEditModalBtn")
+        .addEventListener("click", closeEditModal);
+      document
+        .getElementById("cancelEditModalBtn")
+        .addEventListener("click", closeEditModal);
+      editModal.addEventListener("click", (e) => {
+        if (e.target === editModal) closeEditModal();
+      });
+
+      // Init Page
+      document.addEventListener("DOMContentLoaded", async () => {
+        await loadDropdownData();
+        fetchRooms();
       });
     </script>
-    <!-- hi -->
   </body>
 </html>

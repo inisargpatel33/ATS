@@ -69,3 +69,8 @@ CREATE TABLE IF NOT EXISTS timetables (
     UNIQUE (day_of_week, timeslot, faculty_id),
     UNIQUE (day_of_week, timeslot, batch_id)
 );
+
+
+ALTER TABLE batches 
+ADD COLUMN shift VARCHAR(20) NOT NULL DEFAULT 'Morning' 
+CHECK (shift IN ('Morning', 'Afternoon'));

@@ -32,14 +32,12 @@
               "on-primary": "#ffffff",
               "error-container": "#ffdad6",
               "tertiary-fixed": "#d8e8c7",
-              "on-tertiary-fixed-variant": "#3d4b33",
             },
             fontFamily: {
               "headline-md": ["Bricolage Grotesque"],
               "headline-lg": ["Bricolage Grotesque"],
               "display-lg": ["Bricolage Grotesque"],
               "body-md": ["Plus Jakarta Sans"],
-              "body-lg": ["Plus Jakarta Sans"],
               "label-md": ["Plus Jakarta Sans"],
               "label-sm": ["Plus Jakarta Sans"],
             },
@@ -70,6 +68,18 @@
       }
       .offset-shadow-sm {
         box-shadow: 4px 4px 0px 0px rgba(24, 25, 25, 1);
+      }
+      ::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1edec;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #181919;
+        border-radius: 4px;
       }
     </style>
   </head>
@@ -121,11 +131,18 @@
           ><span class="font-label-md">Subjects</span></a
         >
         <a
-          href="scheduler.html"
+          href="schedular.html"
           class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
           ><span class="material-symbols-outlined">auto_awesome</span
           ><span class="font-label-md">Scheduler</span></a
         >
+        <a
+          href="timetable.html"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+        >
+          <span class="material-symbols-outlined">calendar_month</span>
+          <span class="font-label-md">Timetables</span>
+        </a>
       </nav>
     </aside>
 
@@ -152,8 +169,8 @@
             <p
               class="font-body-lg text-lg text-on-surface-variant leading-relaxed"
             >
-              Manage student groups, assign mentors, and track overall
-              optimization progress.
+              Manage student groups, assign mentors, and organize curriculum
+              paths.
             </p>
           </div>
         </section>
@@ -181,7 +198,6 @@
           </button>
         </div>
 
-        <!-- Filter context to match CURRENT_DEPT_ID -->
         <div
           class="flex justify-between items-center pb-2 border-b-2 border-surface-variant"
         >
@@ -264,6 +280,27 @@
               placeholder="e.g., 45"
               class="w-full bg-surface hand-drawn-border-sm p-3 focus:outline-none focus:ring-4 focus:ring-secondary-container text-body-md"
             />
+          </div>
+
+          <!-- SHIFT DROPDOWN ADDED HERE -->
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Shift <span class="text-error">*</span></label
+            >
+            <div class="relative">
+              <select
+                id="batchShift"
+                required
+                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+              >
+                <option value="Morning">Morning</option>
+                <option value="Afternoon">Afternoon</option>
+              </select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                >expand_more</span
+              >
+            </div>
           </div>
 
           <div class="flex flex-col space-y-2">
@@ -368,6 +405,27 @@
             />
           </div>
 
+          <!-- SHIFT DROPDOWN ADDED HERE -->
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Shift <span class="text-error">*</span></label
+            >
+            <div class="relative">
+              <select
+                id="editBatchShift"
+                required
+                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+              >
+                <option value="Morning">Morning</option>
+                <option value="Afternoon">Afternoon</option>
+              </select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                >expand_more</span
+              >
+            </div>
+          </div>
+
           <div class="flex flex-col space-y-2">
             <label class="font-label-md text-primary font-bold"
               >Mentor (Optional)</label
@@ -425,7 +483,7 @@
 
     <script>
       const API_URL = "http://127.0.0.1:8000";
-      let CURRENT_DEPT_ID = null; // No longer hardcoded to 1!
+      let CURRENT_DEPT_ID = null;
 
       let globalBatchesData = {};
       let currentlyEditingBatchId = null;
@@ -438,7 +496,6 @@
       // --- FETCH DATA FOR DROPDOWNS ---
       async function loadDropdownData() {
         try {
-          // Fetch Departments
           const deptRes = await fetch(`${API_URL}/get-departments/`);
           const deptData = await deptRes.json();
           const deptSelects = [
@@ -446,7 +503,6 @@
             document.getElementById("editBatchDept"),
           ];
 
-          // Auto-set the current department to the first one in the database
           if (deptData.data.length > 0 && CURRENT_DEPT_ID === null) {
             CURRENT_DEPT_ID = deptData.data[0].id;
             currentDeptDisplay.innerText = deptData.data[0].name;
@@ -457,7 +513,6 @@
             deptSelects.forEach((sel) => (sel.innerHTML += opt));
           });
 
-          // Fetch Faculties (for Mentors)
           const facRes = await fetch(`${API_URL}/get-faculties/`);
           const facData = await facRes.json();
           const facSelects = [
@@ -499,27 +554,32 @@
             globalBatchesData[batch.id] = batch;
             const mentorText = batch.mentor_name || "Unassigned";
 
+            // Includes the Shift in the UI now
             const batchCard = `
-          <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col space-y-5 hover:-translate-y-1 transition-transform">
-            <div class="flex justify-between items-start mb-2">
-              <h4 class="font-headline-md text-2xl text-primary">${batch.name}</h4>
-              <button onclick="openEditBatchModal(${batch.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Batch">
-                <span class="material-symbols-outlined text-[20px]">edit</span>
-              </button>
-            </div>
-            <hr class="border-t border-surface-variant my-1">
-            <div class="flex flex-col gap-3 pt-2">
-              <div class="flex items-center gap-3">
-                <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">group</span>
-                <span class="font-label-md text-on-surface-variant">Students: <strong class="text-primary">${batch.student_count}</strong></span>
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">person</span>
-                <span class="font-label-md text-on-surface-variant">Mentor: <strong class="text-primary">${mentorText}</strong></span>
-              </div>
-            </div>
-          </article>
-        `;
+              <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col space-y-5 hover:-translate-y-1 transition-transform">
+                <div class="flex justify-between items-start mb-2">
+                  <h4 class="font-headline-md text-2xl text-primary">${batch.name}</h4>
+                  <button onclick="openEditBatchModal(${batch.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Batch">
+                    <span class="material-symbols-outlined text-[20px]">edit</span>
+                  </button>
+                </div>
+                <hr class="border-t border-surface-variant my-1">
+                <div class="flex flex-col gap-3 pt-2">
+                  <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">group</span>
+                    <span class="font-label-md text-on-surface-variant">Students: <strong class="text-primary">${batch.student_count}</strong></span>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">schedule</span>
+                    <span class="font-label-md text-on-surface-variant">Shift: <strong class="text-primary">${batch.shift || "Morning"}</strong></span>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">person</span>
+                    <span class="font-label-md text-on-surface-variant">Mentor: <strong class="text-primary">${mentorText}</strong></span>
+                  </div>
+                </div>
+              </article>
+            `;
             batchesGrid.innerHTML += batchCard;
           });
         } catch (error) {
@@ -546,6 +606,7 @@
             student_count: parseInt(
               document.getElementById("batchStudentCount").value,
             ),
+            shift: document.getElementById("batchShift").value, // Grabs Shift Data
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
@@ -563,7 +624,6 @@
                 "mt-4 font-label-md text-tertiary-container";
               statusMsg.innerText = "✅ Batch saved successfully!";
 
-              // Dynamically switch the view to the department we just saved to
               CURRENT_DEPT_ID = batchData.department_id;
               const selectedDeptName =
                 document.getElementById("batchDept").options[
@@ -597,6 +657,8 @@
         document.getElementById("editBatchName").value = batch.name;
         document.getElementById("editBatchStudentCount").value =
           batch.student_count;
+        document.getElementById("editBatchShift").value =
+          batch.shift || "Morning"; // Populates Shift Data
         document.getElementById("editBatchMentor").value =
           batch.mentor_id || "";
 
@@ -629,6 +691,7 @@
             student_count: parseInt(
               document.getElementById("editBatchStudentCount").value,
             ),
+            shift: document.getElementById("editBatchShift").value, // Grabs Shift Data
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
@@ -644,7 +707,6 @@
             const result = await response.json();
 
             if (response.ok) {
-              // Switch view to updated department
               CURRENT_DEPT_ID = batchData.department_id;
               const selectedDeptName =
                 document.getElementById("editBatchDept").options[
