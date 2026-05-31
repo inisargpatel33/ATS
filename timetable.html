@@ -229,6 +229,7 @@
 
       <div class="p-4 md:p-8 lg:p-10 max-w-[1600px] mx-auto">
         <div
+          id="pageTitleUI"
           class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8"
         >
           <h2 class="font-display-lg text-3xl md:text-4xl text-primary">
@@ -428,9 +429,12 @@
       function initDraftMode() {
         document.getElementById("draftBanner").classList.remove("hidden");
 
+        // --- NEW: Hide the Title and Batch Dropdown during Draft Mode ---
+        document.getElementById("pageTitleUI").classList.add("hidden");
+        document.getElementById("batchSelectionUI").classList.add("hidden");
+
         // Load the array of 3 options
         const draftOptions = JSON.parse(sessionStorage.getItem("draftOptions"));
-
         if (!draftOptions || draftOptions.length === 0) {
           alert("Draft data expired or missing.");
           window.location.href = "timetable.html";
@@ -542,6 +546,11 @@
       async function initNormalMode() {
         if (!CURRENT_DEPT_ID) return;
 
+        if (document.getElementById("pageTitleUI")) {
+          document.getElementById("pageTitleUI").classList.remove("hidden");
+        }
+        document.getElementById("batchSelectionUI").classList.remove("hidden");
+
         const batchSelect = document.getElementById("batchSelectFilter");
         batchSelect.innerHTML = `<option value="" disabled selected>Loading batches...</option>`;
 
@@ -553,7 +562,7 @@
 
           batchSelect.innerHTML = `<option value="" disabled selected>Select a Batch...</option>`;
           batchData.data.forEach((b) => {
-            batchSelect.innerHTML += `<option value="${b.id}" data-batchname="${b.name}">${b.name} (${b.shift})</option>`;
+            batchSelect.innerHTML += `<option value="${b.id}" data-batchname="${b.name}">${b.name}</option>`;
           });
 
           // Fetch timetables from DB in background

@@ -106,16 +106,16 @@ class BatchCreate(BaseModel):
     student_count: int
     mentor_id: Optional[int] = None
     department_id: int
-    shift: str = "Morning"
+    # shift: str = "Morning"
 
     # CHANGE:
     # Added shift validation.
-    @field_validator("shift")
-    @classmethod
-    def validate_shift(cls, v):
-        if v not in ["Morning", "Afternoon"]:
-            raise ValueError("Shift must be Morning or Afternoon")
-        return v
+    # @field_validator("shift")
+    # @classmethod
+    # def validate_shift(cls, v):
+    #     if v not in ["Morning", "Afternoon"]:
+    #         raise ValueError("Shift must be Morning or Afternoon")
+    #     return v
 
 
 class SubjectCreate(BaseModel):
@@ -171,16 +171,27 @@ def add_department(dept: DeptCreate):
     cursor = conn.cursor()
 
     try:
-        cursor.execute(
-            "INSERT INTO departments (name) VALUES (%s)",
-            (dept.name,)
-        )
+        # Removed shift from the database insertion
+        cursor.execute("""
+            INSERT INTO batches (
+                name,
+                student_count,
+                mentor_id,
+                department_id
+            )
+            VALUES (%s,%s,%s,%s)
+        """, (
+            batch.name,
+            batch.student_count,
+            batch.mentor_id,
+            batch.department_id
+        ))
 
         conn.commit()
 
         return {
             "success": True,
-            "message": "Department added successfully"
+            "message": "Batch added successfully"
         }
 
     except errors.UniqueViolation:
@@ -548,7 +559,6 @@ def get_batches(department_id: int):
                 b.id,
                 b.name,
                 b.student_count,
-                b.shift,
                 b.department_id,
                 b.mentor_id,
                 f.name AS mentor_name
@@ -760,21 +770,27 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
         if not faculties or not subjects or not rooms or not batches:
          return {"success": False, "message": "Missing required data"}
 
-                    # =====================================================
-                    # 2. EXPERTISE & ROOM MAPS
-                    # =====================================================
+                # =====================================================
+                # 2. EXPERTISE & ROOM MAPS
+                # =====================================================
         exp_map = {(exp["faculty_id"], exp["subject_id"]): float(exp["competency_tier"]) for exp in expertise}
 
+        # NEW: Map valid rooms by BOTH subject and batch to strictly enforce capacity
         eligible_rooms = {}
         for subject in subjects:
-            valid_rooms = []
-            for room in rooms:
-                if subject["subject_type"] == "Practical" and room["room_type"] == "Laboratory":
-                    valid_rooms.append(room)
-                elif subject["subject_type"] != "Practical" and room["room_type"] != "Laboratory":
-                    valid_rooms.append(room)
-            eligible_rooms[subject["id"]] = valid_rooms
+            for batch in batches:
+                valid_rooms = []
+                for room in rooms:
+                    # ---> THE FIX: Strict Capacity Check! <---
+                    if room["capacity"] >= batch["student_count"]:
+                        if subject["subject_type"] == "Practical" and room["room_type"] == "Laboratory":
+                            valid_rooms.append(room)
+                        elif subject["subject_type"] != "Practical" and room["room_type"] != "Laboratory":
+                            valid_rooms.append(room)
+                            
+                eligible_rooms[(subject["id"], batch["id"])] = valid_rooms
 
+                # =====================================================
                     # =====================================================
                     # 3. DYNAMIC SLOTS CONFIGURATION
                     # =====================================================
@@ -818,11 +834,17 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                 # =====================================================
                 # 4. THE 3-OPTION GENERATOR LOOP
                 # =====================================================
+        # scenarios = [
+        #     {"name": "Option 1: Balanced", "w_exp": 10, "w_room": 20, "w_morn": 3},
+        #     {"name": "Option 2: Minimum Movement", "w_exp": 5, "w_room": 100, "w_morn": 1},
+        #     {"name": "Option 3: Faculty Expertise Focus", "w_exp": 50, "w_room": 5, "w_morn": 1}
+        # ]
+        
         scenarios = [
-            {"name": "Option 1: Balanced", "w_exp": 10, "w_room": 20, "w_morn": 3},
-            {"name": "Option 2: Minimum Movement", "w_exp": 5, "w_room": 100, "w_morn": 1},
-            {"name": "Option 3: Faculty Expertise Focus", "w_exp": 50, "w_room": 5, "w_morn": 1}
-        ]
+                    {"name": "Option 1: Balanced", "w_exp": 10, "w_room": 20},
+                    {"name": "Option 2: Minimum Movement", "w_exp": 5, "w_room": 100},
+                    {"name": "Option 3: Faculty Expertise Focus", "w_exp": 50, "w_room": 5}
+                ]
 
         generated_options = []
 
@@ -840,14 +862,14 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
             for faculty in faculties:
                 for subject in subjects:
                     if (faculty["id"], subject["id"]) not in exp_map: continue
-                    for room in eligible_rooms[subject["id"]]:
-                        for batch in batches:
+                    for batch in batches:
+                        # USE NEW TUPLE KEY HERE (Subject ID + Batch ID)
+                        for room in eligible_rooms[(subject["id"], batch["id"])]:
                             for day in DAYS:
                                 for slot in dynamic_slots:
                                     key = (faculty["id"], subject["id"], room["id"], day, slot, batch["id"])
                                     x[key] = model.NewBoolVar(f"x_{key}")
-
-            # --- HARD CONSTRAINTS (Conflicts) ---
+    # --- HARD CONSTRAINTS (Conflicts) ---
             for faculty in faculties:
                 for day in DAYS:
                     for slot in dynamic_slots:
@@ -873,10 +895,12 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                     sub_vars = [x[k] for k in x if k[1] == subject["id"] and k[5] == batch["id"]]
                     
                     if subject["subject_type"] == "Practical":
+                        
                         block_vars = []
                         for fac in faculties:
-                            for room in eligible_rooms[subject["id"]]:
-                                if (fac["id"], subject["id"]) not in exp_map: continue
+                            if (fac["id"], subject["id"]) not in exp_map: continue
+                            # USE NEW TUPLE KEY HERE
+                            for room in eligible_rooms[(subject["id"], batch["id"])]:
                                 for day in DAYS:
                                     for i in range(len(dynamic_slots) - req + 1):
                                         if slot_hours[i + req - 1] - slot_hours[i] != req - 1: continue 
@@ -885,6 +909,8 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                                         for j in range(req):
                                             var_k = (fac["id"], subject["id"], room["id"], day, dynamic_slots[i+j], batch["id"])
                                             if var_k in x: model.AddImplication(block_var, x[var_k])
+                                            
+                                                    
                         if block_vars: model.AddExactlyOne(block_vars)
                         if sub_vars: model.Add(sum(sub_vars) == req)
                     else:
@@ -921,23 +947,44 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                         vars_day = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day]
                         if vars_day: model.Add(sum(vars_day) <= 2)
 
-            if "faculty_day_off" in payload.constraints:
-                for faculty in faculties:
-                    worked_days = []
-                    for day in DAYS:
-                        vars_day = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day]
-                        if vars_day:
-                            worked_day_var = model.NewBoolVar(f"wk_{faculty['id']}_{day}")
-                            model.AddMaxEquality(worked_day_var, vars_day)
-                            worked_days.append(worked_day_var)
-                    if worked_days: model.Add(sum(worked_days) <= len(DAYS) - 1)
+            # if "faculty_day_off" in payload.constraints:
+            #     for faculty in faculties:
+            #         worked_days = []
+            #         for day in DAYS:
+            #             vars_day = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day]
+            #             if vars_day:
+            #                 worked_day_var = model.NewBoolVar(f"wk_{faculty['id']}_{day}")
+            #                 model.AddMaxEquality(worked_day_var, vars_day)
+            #                 worked_days.append(worked_day_var)
+            #         if worked_days: model.Add(sum(worked_days) <= len(DAYS) - 1)
 
             # --- OBJECTIVE SCORING (Uses dynamic weights from loop) ---
             objective_terms = []
             for key, var in x.items():
                 score = int(exp_map[(key[0], key[1])] * scenario["w_exp"])
-                if "morning_heavy" in payload.constraints:
-                    if "AM" in key[4]: score += (3 * scenario["w_morn"])
+                # if "morning_heavy" in payload.constraints:
+                #     if "AM" in key[4]: score += (3 * scenario["w_morn"])
+                objective_terms.append(var * score)
+                
+            for batch in batches:
+                for day in DAYS:
+                    for i in range(len(dynamic_slots) - 1):
+                        if slot_hours[i+1] - slot_hours[i] != 1: continue 
+                        for room in rooms:
+                            b_r_s1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == dynamic_slots[i] and k[2] == room["id"]]
+                            b_r_s2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == dynamic_slots[i+1] and k[2] == room["id"]]
+                            if b_r_s1 and b_r_s2:
+                                b_in_r1 = model.NewBoolVar(f"r1_{batch['id']}_{room['id']}_{day}_{i}")
+                                b_in_r2 = model.NewBoolVar(f"r2_{batch['id']}_{room['id']}_{day}_{i+1}")
+                                same_rm = model.NewBoolVar(f"srm_{batch['id']}_{room['id']}_{day}_{i}")
+                                model.Add(b_in_r1 == sum(b_r_s1))
+                                model.Add(b_in_r2 == sum(b_r_s2))
+                                model.AddBoolAnd([b_in_r1, b_in_r2]).OnlyEnforceIf(same_rm)
+                                objective_terms.append(same_rm * scenario["w_room"])
+            # --- NEW: OBJECTIVE SCORING ---
+            objective_terms = []
+            for key, var in x.items():
+                score = int(exp_map[(key[0], key[1])] * scenario["w_exp"])
                 objective_terms.append(var * score)
                 
             for batch in batches:
@@ -956,6 +1003,59 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                                 model.AddBoolAnd([b_in_r1, b_in_r2]).OnlyEnforceIf(same_rm)
                                 objective_terms.append(same_rm * scenario["w_room"])
 
+            # =====================================================
+            # NEW: GAP MINIMIZATION (SWISS CHEESE PREVENTION)
+            # =====================================================
+            
+            # 1. MINIMIZE STUDENT GAPS
+            if "minimize_student_gaps" in payload.constraints:
+                for batch in batches:
+                    for day in DAYS:
+                        y = []
+                        for i, slot in enumerate(dynamic_slots):
+                            slot_vars = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot]
+                            is_active = model.NewBoolVar(f"b_act_{batch['id']}_{day}_{i}")
+                            if slot_vars: model.Add(is_active == sum(slot_vars))
+                            else: model.Add(is_active == 0)
+                            y.append(is_active)
+                            
+                        for i in range(1, len(dynamic_slots) - 1):
+                            has_before = model.NewBoolVar(f"hb_{batch['id']}_{day}_{i}")
+                            has_after = model.NewBoolVar(f"ha_{batch['id']}_{day}_{i}")
+                            is_gap = model.NewBoolVar(f"gap_{batch['id']}_{day}_{i}")
+                            
+                            model.Add(sum(y[:i]) >= 1).OnlyEnforceIf(has_before)
+                            model.Add(sum(y[:i]) == 0).OnlyEnforceIf(has_before.Not())
+                            model.Add(sum(y[i+1:]) >= 1).OnlyEnforceIf(has_after)
+                            model.Add(sum(y[i+1:]) == 0).OnlyEnforceIf(has_after.Not())
+                            
+                            model.AddBoolOr([y[i], has_before.Not(), has_after.Not(), is_gap])
+                            objective_terms.append(is_gap * -30) # Massive penalty for student gaps
+
+            # 2. MINIMIZE FACULTY GAPS
+            if "minimize_faculty_gaps" in payload.constraints:
+                for faculty in faculties:
+                    for day in DAYS:
+                        y = []
+                        for i, slot in enumerate(dynamic_slots):
+                            slot_vars = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day and k[4] == slot]
+                            is_active = model.NewBoolVar(f"f_act_{faculty['id']}_{day}_{i}")
+                            if slot_vars: model.Add(is_active == sum(slot_vars))
+                            else: model.Add(is_active == 0)
+                            y.append(is_active)
+                            
+                        for i in range(1, len(dynamic_slots) - 1):
+                            has_before = model.NewBoolVar(f"fhb_{faculty['id']}_{day}_{i}")
+                            has_after = model.NewBoolVar(f"fha_{faculty['id']}_{day}_{i}")
+                            is_gap = model.NewBoolVar(f"fgap_{faculty['id']}_{day}_{i}")
+                            
+                            model.Add(sum(y[:i]) >= 1).OnlyEnforceIf(has_before)
+                            model.Add(sum(y[:i]) == 0).OnlyEnforceIf(has_before.Not())
+                            model.Add(sum(y[i+1:]) >= 1).OnlyEnforceIf(has_after)
+                            model.Add(sum(y[i+1:]) == 0).OnlyEnforceIf(has_after.Not())
+                            
+                            model.AddBoolOr([y[i], has_before.Not(), has_after.Not(), is_gap])
+                            objective_terms.append(is_gap * -30) # Massive penalty for faculty gaps
             model.Maximize(sum(objective_terms))
 
             # --- SOLVE ---
@@ -1059,7 +1159,6 @@ def view_timetable(
                 t.timeslot,
                 t.notes,  -- <-- ADD THIS LINE
                 b.name AS batch,
-                b.shift AS batch_shift,
                 s.name AS subject,
                 r.name AS room,
                 f.name AS faculty

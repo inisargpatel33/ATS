@@ -282,27 +282,6 @@
             />
           </div>
 
-          <!-- SHIFT DROPDOWN ADDED HERE -->
-          <div class="flex flex-col space-y-2">
-            <label class="font-label-md text-primary font-bold"
-              >Shift <span class="text-error">*</span></label
-            >
-            <div class="relative">
-              <select
-                id="batchShift"
-                required
-                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
-              >
-                <option value="Morning">Morning</option>
-                <option value="Afternoon">Afternoon</option>
-              </select>
-              <span
-                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                >expand_more</span
-              >
-            </div>
-          </div>
-
           <div class="flex flex-col space-y-2">
             <label class="font-label-md text-primary font-bold"
               >Mentor (Optional)</label
@@ -386,27 +365,6 @@
               min="1"
               class="w-full bg-surface hand-drawn-border-sm p-3 focus:outline-none focus:ring-4 focus:ring-secondary-container text-body-md"
             />
-          </div>
-
-          <!-- SHIFT DROPDOWN ADDED HERE -->
-          <div class="flex flex-col space-y-2">
-            <label class="font-label-md text-primary font-bold"
-              >Shift <span class="text-error">*</span></label
-            >
-            <div class="relative">
-              <select
-                id="editBatchShift"
-                required
-                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
-              >
-                <option value="Morning">Morning</option>
-                <option value="Afternoon">Afternoon</option>
-              </select>
-              <span
-                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                >expand_more</span
-              >
-            </div>
           </div>
 
           <div class="flex flex-col space-y-2">
@@ -547,10 +505,7 @@
               <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">group</span>
               <span class="font-label-md text-on-surface-variant">Students: <strong class="text-primary">${batch.student_count}</strong></span>
             </div>
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">schedule</span>
-              <span class="font-label-md text-on-surface-variant">Shift: <strong class="text-primary">${batch.shift || "Morning"}</strong></span>
-            </div>
+            
             <div class="flex items-center gap-3">
               <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">person</span>
               <span class="font-label-md text-on-surface-variant">Mentor: <strong class="text-primary">${mentorText}</strong></span>
@@ -584,7 +539,6 @@
             student_count: parseInt(
               document.getElementById("batchStudentCount").value,
             ),
-            shift: document.getElementById("batchShift").value,
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
@@ -626,8 +580,7 @@
         document.getElementById("editBatchName").value = batch.name;
         document.getElementById("editBatchStudentCount").value =
           batch.student_count;
-        document.getElementById("editBatchShift").value =
-          batch.shift || "Morning";
+
         document.getElementById("editBatchMentor").value =
           batch.mentor_id || "";
 
@@ -658,7 +611,6 @@
             student_count: parseInt(
               document.getElementById("editBatchStudentCount").value,
             ),
-            shift: document.getElementById("editBatchShift").value,
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
