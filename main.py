@@ -778,7 +778,25 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                     # =====================================================
                     # 3. DYNAMIC SLOTS CONFIGURATION
                     # =====================================================
+        # dynamic_slots = []
+        # for h in range(payload.start_hour, payload.end_hour):
+        #     if h == payload.break_hour:
+        #         continue # Skip the break period
+            
+        #     am_pm1 = "AM" if h < 12 or h == 24 else "PM"
+        #     disp1 = h if h <= 12 else h - 12
+        #     if disp1 == 0: disp1 = 12
+            
+        #     h2 = h + 1
+        #     am_pm2 = "AM" if h2 < 12 or h2 == 24 else "PM"
+        #     disp2 = h2 if h2 <= 12 else h2 - 12
+        #     if disp2 == 0: disp2 = 12
+            
+        #     dynamic_slots.append(f"{disp1:02d}:00 {am_pm1} - {disp2:02d}:00 {am_pm2}")
+        
+        # For simplicity, we'll use the centralized SHIFT_SLOTS configuration.
         dynamic_slots = []
+        slot_hours = [] # <-- NEW: Track raw hours to detect the lunch break
         for h in range(payload.start_hour, payload.end_hour):
             if h == payload.break_hour:
                 continue # Skip the break period
@@ -793,6 +811,9 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
             if disp2 == 0: disp2 = 12
             
             dynamic_slots.append(f"{disp1:02d}:00 {am_pm1} - {disp2:02d}:00 {am_pm2}")
+            slot_hours.append(h)
+
+        
 
                     # =====================================================
                     # 4. MODEL & VARIABLES
@@ -832,10 +853,57 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                     vars_list = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot]
                     if vars_list: model.AddAtMostOne(vars_list)
 
+        # for batch in batches:
+        #     for subject in subjects:
+        #         vars_list = [x[k] for k in x if k[1] == subject["id"] and k[5] == batch["id"]]
+        #         if vars_list: model.Add(sum(vars_list) == subject["required_sessions"])
+        
+        # CHANGE: We need to handle practical subjects differently to ensure they get scheduled in contiguous blocks in the same room with the same faculty.
+        # This is a common real-world requirement for lab sessions. Theory and seminar subjects can still be scheduled with the previous simple constraint.
         for batch in batches:
             for subject in subjects:
-                vars_list = [x[k] for k in x if k[1] == subject["id"] and k[5] == batch["id"]]
-                if vars_list: model.Add(sum(vars_list) == subject["required_sessions"])
+                req = subject["required_sessions"]
+                sub_vars = [x[k] for k in x if k[1] == subject["id"] and k[5] == batch["id"]]
+                
+                if subject["subject_type"] == "Practical":
+                    # PRACTICAL: Must be a continuous block of 'req' hours, same room, same faculty!
+                    block_vars = []
+                    for fac in faculties:
+                        for room in eligible_rooms[subject["id"]]:
+                            if (fac["id"], subject["id"]) not in exp_map: continue
+                            for day in DAYS:
+                                # Iterate through possible start times
+                                for i in range(len(dynamic_slots) - req + 1):
+                                    # Prevent the block from crossing the lunch gap
+                                    if slot_hours[i + req - 1] - slot_hours[i] != req - 1:
+                                        continue 
+                                        
+                                    block_var = model.NewBoolVar(f"blk_{batch['id']}_{subject['id']}_{fac['id']}_{room['id']}_{day}_{i}")
+                                    block_vars.append(block_var)
+                                    
+                                    # If this block is chosen, lock all slots inside it
+                                    for j in range(req):
+                                        var_k = (fac["id"], subject["id"], room["id"], day, dynamic_slots[i+j], batch["id"])
+                                        if var_k in x:
+                                            model.AddImplication(block_var, x[var_k])
+                                        
+                    # Schedule exactly ONE block per week for this lab
+                    if block_vars:
+                        model.AddExactlyOne(block_vars)
+                    # Ensure no stray single slots exist outside the block
+                    if sub_vars:
+                        model.Add(sum(sub_vars) == req)
+                        
+                else:
+                    # THEORY & SEMINAR: Spread distribution
+                    if sub_vars:
+                        model.Add(sum(sub_vars) == req)
+                    # Max 1 session per day to prevent student burnout
+                    for day in DAYS:
+                        day_vars = [x[k] for k in x if k[1] == subject["id"] and k[5] == batch["id"] and k[3] == day]
+                        if day_vars:
+                            model.Add(sum(day_vars) <= 1)
+
 
         for faculty in faculties:
             vars_list = [x[k] for k in x if k[0] == faculty["id"]]
@@ -861,17 +929,32 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
         # =====================================================
         # 6. DYNAMIC UI CONSTRAINTS
         # =====================================================
+        # if "no_consecutive" in payload.constraints:
+        #     for batch in batches:
+        #         for day in DAYS:
+        #             for subject in subjects:
+        #                 for i in range(len(dynamic_slots) - 1):
+        #                     slot1 = dynamic_slots[i]
+        #                     slot2 = dynamic_slots[i+1]
+        #                     vars_slot1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot1 and k[1] == subject["id"]]
+        #                     vars_slot2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot2 and k[1] == subject["id"]]
+        #                     if vars_slot1 and vars_slot2:
+        #                         model.Add(sum(vars_slot1) + sum(vars_slot2) <= 1)
+        
+        
+        # CHANGE: We need to ensure that the "no_consecutive" constraint does not apply to practical subjects, as they are meant to be scheduled in consecutive blocks. Only theory and seminar subjects should be affected by this constraint.
         if "no_consecutive" in payload.constraints:
-            for batch in batches:
-                for day in DAYS:
-                    for subject in subjects:
-                        for i in range(len(dynamic_slots) - 1):
-                            slot1 = dynamic_slots[i]
-                            slot2 = dynamic_slots[i+1]
-                            vars_slot1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot1 and k[1] == subject["id"]]
-                            vars_slot2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot2 and k[1] == subject["id"]]
-                            if vars_slot1 and vars_slot2:
-                                model.Add(sum(vars_slot1) + sum(vars_slot2) <= 1)
+                    for batch in batches:
+                        for day in DAYS:
+                            for subject in subjects:
+                                # Skip Practicals! They MUST be consecutive.
+                                if subject["subject_type"] == "Practical": continue
+                                for i in range(len(dynamic_slots) - 1):
+                                    slot1, slot2 = dynamic_slots[i], dynamic_slots[i+1]
+                                    vars_s1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot1 and k[1] == subject["id"]]
+                                    vars_s2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot2 and k[1] == subject["id"]]
+                                    if vars_s1 and vars_s2:
+                                        model.Add(sum(vars_s1) + sum(vars_s2) <= 1)
 
         if "strict_faculty_load" in payload.constraints:
             for faculty in faculties:
@@ -894,18 +977,59 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
         # =====================================================
         # 7. OBJECTIVE & SOFT CONSTRAINTS
         # =====================================================
+        # objective_terms = []
+        # for key, var in x.items():
+        #     faculty_id = key[0]
+        #     subject_id = key[1]
+        #     slot = key[4]
+        #     score = int(exp_map[(faculty_id, subject_id)] * 10)
+
+        #     if "morning_heavy" in payload.constraints:
+        #         if "AM" in slot: score += 3
+        #         elif "12:00 PM" in slot: score += 1
+
+        #     objective_terms.append(var * score)
+
+        # model.Maximize(sum(objective_terms))
+
+
+        # CHANGE: Updated the scoring mechanism to be more granular and impactful, especially for the "morning_heavy" constraint. The base score is now multiplied by 10 to give more weight to faculty expertise, and the morning slot bonus is increased to better reflect the preference for scheduling in the morning.
         objective_terms = []
         for key, var in x.items():
-            faculty_id = key[0]
-            subject_id = key[1]
-            slot = key[4]
-            score = int(exp_map[(faculty_id, subject_id)] * 10)
+            fac_id, sub_id, slot = key[0], key[1], key[4]
+            score = int(exp_map[(fac_id, sub_id)] * 10)
 
             if "morning_heavy" in payload.constraints:
                 if "AM" in slot: score += 3
                 elif "12:00 PM" in slot: score += 1
 
             objective_terms.append(var * score)
+            
+            
+        # --- SOLVING ROOM CHURNING ---
+        # Reward the engine (+20 points) if a batch stays in the SAME room for adjacent slots
+        # This encourages the engine to schedule back-to-back classes for the same batch in the same room, which is more convenient for students and faculty, and reduces unnecessary movement between rooms.
+        for batch in batches:
+            for day in DAYS:
+                for i in range(len(dynamic_slots) - 1):
+                    # Skip checking if the gap crosses lunch break
+                    if slot_hours[i+1] - slot_hours[i] != 1: continue 
+                    
+                    slot1, slot2 = dynamic_slots[i], dynamic_slots[i+1]
+                    for room in rooms:
+                        b_r_s1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot1 and k[2] == room["id"]]
+                        b_r_s2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot2 and k[2] == room["id"]]
+                        
+                        if b_r_s1 and b_r_s2:
+                            b_in_r1 = model.NewBoolVar(f"b_in_r1_{batch['id']}_{room['id']}_{day}_{i}")
+                            b_in_r2 = model.NewBoolVar(f"b_in_r2_{batch['id']}_{room['id']}_{day}_{i+1}")
+                            same_room_var = model.NewBoolVar(f"same_rm_{batch['id']}_{room['id']}_{day}_{i}")
+                            
+                            model.Add(b_in_r1 == sum(b_r_s1))
+                            model.Add(b_in_r2 == sum(b_r_s2))
+                            model.AddBoolAnd([b_in_r1, b_in_r2]).OnlyEnforceIf(same_room_var)
+                            
+                            objective_terms.append(same_room_var * 20)
 
         model.Maximize(sum(objective_terms))
 
