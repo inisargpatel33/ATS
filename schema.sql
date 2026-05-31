@@ -25,12 +25,26 @@ CREATE TABLE IF NOT EXISTS faculties (
 
 -- 4. Batches (Depends on departments & faculties)
 CREATE TABLE IF NOT EXISTS batches (
+    -- id SERIAL PRIMARY KEY,
+    -- department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    -- name VARCHAR(255) NOT NULL,
+    -- student_count INTEGER NOT NULL CHECK (student_count > 0),
+    -- mentor_id INTEGER REFERENCES faculties(id) ON DELETE SET NULL,
+    -- UNIQUE (department_id, name)
+
     id SERIAL PRIMARY KEY,
     department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    semester_id INTEGER REFERENCES semesters(id) ON DELETE CASCADE,
+
     name VARCHAR(255) NOT NULL,
     student_count INTEGER NOT NULL CHECK (student_count > 0),
+
+    shift VARCHAR(20) NOT NULL DEFAULT 'Morning'
+    CHECK (shift IN ('Morning', 'Afternoon')),
+
     mentor_id INTEGER REFERENCES faculties(id) ON DELETE SET NULL,
-    UNIQUE (department_id, name)
+
+    UNIQUE(department_id, semester_id, name)
 );
 
 -- 5. Rooms (Depends on departments)
@@ -74,3 +88,19 @@ CREATE TABLE IF NOT EXISTS timetables (
 ALTER TABLE batches 
 ADD COLUMN shift VARCHAR(20) NOT NULL DEFAULT 'Morning' 
 CHECK (shift IN ('Morning', 'Afternoon'));
+
+
+-- chatgpt generated this code, do not edit
+CREATE TABLE semesters (
+    id SERIAL PRIMARY KEY,
+    department_id INTEGER REFERENCES departments(id) ON DELETE CASCADE,
+    name VARCHAR(50) NOT NULL,
+    term_number INTEGER NOT NULL
+);
+
+-- Junction table to link batches and subjects for each semester
+CREATE TABLE semester_subjects (
+    semester_id INTEGER REFERENCES semesters(id) ON DELETE CASCADE,
+    subject_id INTEGER REFERENCES subjects(id) ON DELETE CASCADE,
+    PRIMARY KEY (semester_id, subject_id)
+);

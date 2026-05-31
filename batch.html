@@ -83,7 +83,7 @@
       }
     </style>
   </head>
-  <body class="bg-surface text-primary font-body-md overflow-x-hidden">
+  <body class="bg-surface text-on-surface-variant">
     <aside
       class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 border-r-2 border-primary bg-surface py-6 gap-2 z-40 shadow-[6px_0px_0px_0px_rgba(24,25,25,0.05)]"
     >
@@ -156,6 +156,17 @@
             >SmartSched Uni</span
           >
         </div>
+        <div
+          class="flex items-center gap-3 bg-white hand-drawn-border-sm offset-shadow-sm px-3 py-2"
+        >
+          <span class="material-symbols-outlined text-primary">apartment</span>
+          <select
+            id="globalDeptSelect"
+            class="bg-transparent border-none focus:ring-0 text-body-md font-bold text-primary appearance-none cursor-pointer outline-none w-48"
+          >
+            <option value="" disabled selected>Loading Departments...</option>
+          </select>
+        </div>
       </header>
 
       <div class="p-4 md:p-8 lg:p-10 space-y-8 max-w-[1400px] mx-auto">
@@ -198,17 +209,6 @@
           </button>
         </div>
 
-        <div
-          class="flex justify-between items-center pb-2 border-b-2 border-surface-variant"
-        >
-          <p class="font-label-md text-on-surface-variant">
-            Showing batches for:
-            <strong id="currentDeptDisplay" class="text-primary"
-              >Loading...</strong
-            >
-          </p>
-        </div>
-
         <section
           id="batchesGrid"
           class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-12"
@@ -236,24 +236,24 @@
         </div>
 
         <form id="newBatchForm" class="space-y-6">
-          <div class="flex flex-col space-y-2">
+          <!-- <div class="flex flex-col space-y-2">
             <label class="font-label-md text-primary font-bold"
               >Department <span class="text-error">*</span></label
             >
-            <div class="relative">
-              <select
-                id="batchDept"
-                required
-                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
-              >
-                <option value="" disabled selected>Select Department...</option>
-              </select>
-              <span
-                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                >expand_more</span
-              >
-            </div>
+          <div class="relative">
+            <select
+              id="batchDept"
+              required
+              class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+            >
+              <option value="" disabled selected>Select Department...</option>
+            </select>
+            <span
+              class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+              >expand_more</span
+            >
           </div>
+        </div> -->
 
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
@@ -363,23 +363,6 @@
         </div>
 
         <form id="editBatchForm" class="space-y-6">
-          <div class="flex flex-col space-y-2">
-            <label class="font-label-md text-primary font-bold"
-              >Department <span class="text-error">*</span></label
-            >
-            <div class="relative">
-              <select
-                id="editBatchDept"
-                required
-                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
-              ></select>
-              <span
-                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                >expand_more</span
-              >
-            </div>
-          </div>
-
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
               >Batch Name <span class="text-error">*</span></label
@@ -484,52 +467,48 @@
     <script>
       const API_URL = "http://127.0.0.1:8000";
       let CURRENT_DEPT_ID = null;
-
       let globalBatchesData = {};
       let currentlyEditingBatchId = null;
 
       const batchesGrid = document.getElementById("batchesGrid");
       const addModal = document.getElementById("addBatchModal");
       const editModal = document.getElementById("editBatchModal");
-      const currentDeptDisplay = document.getElementById("currentDeptDisplay");
 
-      // --- FETCH DATA FOR DROPDOWNS ---
-      async function loadDropdownData() {
+      // --- 1. LISTEN TO GLOBAL HEADER DROPDOWN ---
+      window.addEventListener("departmentReady", async (e) => {
+        CURRENT_DEPT_ID = parseInt(e.detail);
+        await loadMentors(); // Load the mentors for this specific department
+        fetchBatches(); // Load the batches for this specific department
+      });
+
+      // --- 2. LOAD MENTORS FOR THE ADD/EDIT MODAL ---
+      async function loadMentors() {
         try {
-          const deptRes = await fetch(`${API_URL}/get-departments/`);
-          const deptData = await deptRes.json();
-          const deptSelects = [
-            document.getElementById("batchDept"),
-            document.getElementById("editBatchDept"),
-          ];
-
-          if (deptData.data.length > 0 && CURRENT_DEPT_ID === null) {
-            CURRENT_DEPT_ID = deptData.data[0].id;
-            currentDeptDisplay.innerText = deptData.data[0].name;
-          }
-
-          deptData.data.forEach((dept) => {
-            const opt = `<option value="${dept.id}">${dept.name}</option>`;
-            deptSelects.forEach((sel) => (sel.innerHTML += opt));
-          });
-
           const facRes = await fetch(`${API_URL}/get-faculties/`);
           const facData = await facRes.json();
+
+          // Filter faculties so we only show mentors from the active department
+          const deptFaculties = facData.data.filter(
+            (f) => f.department_id === CURRENT_DEPT_ID,
+          );
+
           const facSelects = [
             document.getElementById("batchMentor"),
             document.getElementById("editBatchMentor"),
           ];
 
-          facData.data.forEach((fac) => {
-            const opt = `<option value="${fac.id}">${fac.name} (${fac.department_name})</option>`;
-            facSelects.forEach((sel) => (sel.innerHTML += opt));
+          facSelects.forEach((sel) => {
+            sel.innerHTML = '<option value="">-- Unassigned --</option>';
+            deptFaculties.forEach((fac) => {
+              sel.innerHTML += `<option value="${fac.id}">${fac.name}</option>`;
+            });
           });
         } catch (err) {
-          console.error("Failed to load dropdowns", err);
+          console.error("Failed to load mentors", err);
         }
       }
 
-      // --- FETCH BATCHES ---
+      // --- 3. FETCH BATCHES ---
       async function fetchBatches() {
         if (!CURRENT_DEPT_ID) {
           batchesGrid.innerHTML = `<p class="text-on-surface-variant italic col-span-full">Please create a department first.</p>`;
@@ -554,32 +533,31 @@
             globalBatchesData[batch.id] = batch;
             const mentorText = batch.mentor_name || "Unassigned";
 
-            // Includes the Shift in the UI now
             const batchCard = `
-              <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col space-y-5 hover:-translate-y-1 transition-transform">
-                <div class="flex justify-between items-start mb-2">
-                  <h4 class="font-headline-md text-2xl text-primary">${batch.name}</h4>
-                  <button onclick="openEditBatchModal(${batch.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Batch">
-                    <span class="material-symbols-outlined text-[20px]">edit</span>
-                  </button>
-                </div>
-                <hr class="border-t border-surface-variant my-1">
-                <div class="flex flex-col gap-3 pt-2">
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">group</span>
-                    <span class="font-label-md text-on-surface-variant">Students: <strong class="text-primary">${batch.student_count}</strong></span>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">schedule</span>
-                    <span class="font-label-md text-on-surface-variant">Shift: <strong class="text-primary">${batch.shift || "Morning"}</strong></span>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">person</span>
-                    <span class="font-label-md text-on-surface-variant">Mentor: <strong class="text-primary">${mentorText}</strong></span>
-                  </div>
-                </div>
-              </article>
-            `;
+        <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col space-y-5 hover:-translate-y-1 transition-transform">
+          <div class="flex justify-between items-start mb-2">
+            <h4 class="font-headline-md text-2xl text-primary">${batch.name}</h4>
+            <button onclick="openEditBatchModal(${batch.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Batch">
+              <span class="material-symbols-outlined text-[20px]">edit</span>
+            </button>
+          </div>
+          <hr class="border-t border-surface-variant my-1">
+          <div class="flex flex-col gap-3 pt-2">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">group</span>
+              <span class="font-label-md text-on-surface-variant">Students: <strong class="text-primary">${batch.student_count}</strong></span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">schedule</span>
+              <span class="font-label-md text-on-surface-variant">Shift: <strong class="text-primary">${batch.shift || "Morning"}</strong></span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">person</span>
+              <span class="font-label-md text-on-surface-variant">Mentor: <strong class="text-primary">${mentorText}</strong></span>
+            </div>
+          </div>
+        </article>
+      `;
             batchesGrid.innerHTML += batchCard;
           });
         } catch (error) {
@@ -587,7 +565,7 @@
         }
       }
 
-      // --- ADD BATCH ---
+      // --- 4. ADD BATCH ---
       document
         .getElementById("newBatchForm")
         .addEventListener("submit", async (e) => {
@@ -601,12 +579,12 @@
 
           const mentorVal = document.getElementById("batchMentor").value;
           const batchData = {
-            department_id: parseInt(document.getElementById("batchDept").value),
+            department_id: CURRENT_DEPT_ID, // <-- Uses the Global ID automatically!
             name: document.getElementById("batchName").value,
             student_count: parseInt(
               document.getElementById("batchStudentCount").value,
             ),
-            shift: document.getElementById("batchShift").value, // Grabs Shift Data
+            shift: document.getElementById("batchShift").value,
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
@@ -623,14 +601,6 @@
               statusMsg.className =
                 "mt-4 font-label-md text-tertiary-container";
               statusMsg.innerText = "✅ Batch saved successfully!";
-
-              CURRENT_DEPT_ID = batchData.department_id;
-              const selectedDeptName =
-                document.getElementById("batchDept").options[
-                  document.getElementById("batchDept").selectedIndex
-                ].text;
-              currentDeptDisplay.innerText = selectedDeptName;
-
               document.getElementById("newBatchForm").reset();
               fetchBatches();
               setTimeout(closeAddModal, 1000);
@@ -648,17 +618,16 @@
           }
         });
 
-      // --- EDIT BATCH ---
+      // --- 5. EDIT BATCH ---
       window.openEditBatchModal = (id) => {
         currentlyEditingBatchId = id;
         const batch = globalBatchesData[id];
 
-        document.getElementById("editBatchDept").value = batch.department_id;
         document.getElementById("editBatchName").value = batch.name;
         document.getElementById("editBatchStudentCount").value =
           batch.student_count;
         document.getElementById("editBatchShift").value =
-          batch.shift || "Morning"; // Populates Shift Data
+          batch.shift || "Morning";
         document.getElementById("editBatchMentor").value =
           batch.mentor_id || "";
 
@@ -684,14 +653,12 @@
 
           const mentorVal = document.getElementById("editBatchMentor").value;
           const batchData = {
-            department_id: parseInt(
-              document.getElementById("editBatchDept").value,
-            ),
+            department_id: CURRENT_DEPT_ID, // <-- Uses the Global ID automatically!
             name: document.getElementById("editBatchName").value,
             student_count: parseInt(
               document.getElementById("editBatchStudentCount").value,
             ),
-            shift: document.getElementById("editBatchShift").value, // Grabs Shift Data
+            shift: document.getElementById("editBatchShift").value,
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
@@ -707,13 +674,6 @@
             const result = await response.json();
 
             if (response.ok) {
-              CURRENT_DEPT_ID = batchData.department_id;
-              const selectedDeptName =
-                document.getElementById("editBatchDept").options[
-                  document.getElementById("editBatchDept").selectedIndex
-                ].text;
-              currentDeptDisplay.innerText = selectedDeptName;
-
               fetchBatches();
               closeEditModal();
             } else {
@@ -730,13 +690,12 @@
           }
         });
 
-      // --- DELETE BATCH ---
+      // --- 6. DELETE & MODAL CONTROLS (Unchanged) ---
       document
         .getElementById("deleteBatchBtn")
         .addEventListener("click", async () => {
           const batchName = globalBatchesData[currentlyEditingBatchId].name;
           if (!confirm(`Delete ${batchName}?`)) return;
-
           try {
             const response = await fetch(
               `${API_URL}/delete-batch/${currentlyEditingBatchId}`,
@@ -754,7 +713,6 @@
           }
         });
 
-      // --- MODAL CONTROLS ---
       const closeAddModal = () => {
         addModal.classList.add("opacity-0");
         document
@@ -792,7 +750,6 @@
       addModal.addEventListener("click", (e) => {
         if (e.target === addModal) closeAddModal();
       });
-
       document
         .getElementById("closeEditModalBtn")
         .addEventListener("click", closeEditModal);
@@ -802,12 +759,7 @@
       editModal.addEventListener("click", (e) => {
         if (e.target === editModal) closeEditModal();
       });
-
-      // Init Page
-      document.addEventListener("DOMContentLoaded", async () => {
-        await loadDropdownData();
-        fetchBatches();
-      });
     </script>
+    <script src="global.js"></script>
   </body>
 </html>

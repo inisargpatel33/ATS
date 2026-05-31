@@ -172,16 +172,6 @@
         </section>
 
         <!-- Dynamic Department Indicator -->
-        <div
-          class="flex justify-between items-center mb-6 pb-2 border-b-2 border-surface-variant"
-        >
-          <p class="font-label-md text-on-surface-variant">
-            Showing rooms for:
-            <strong id="currentDeptDisplay" class="text-primary"
-              >Loading...</strong
-            >
-          </p>
-        </div>
 
         <div class="flex flex-col md:flex-row gap-4 max-w-2xl mb-8">
           <div
@@ -398,8 +388,20 @@
                   <span class="material-symbols-outlined text-[20px]"
                     >computer</span
                   >Computers
-                </div></label
-              >
+                </div>
+
+                <div class="flex flex-col gap-2 mt-4">
+                  <label class="font-label-md text-primary font-bold"
+                    >Extra Features (Optional)</label
+                  >
+                  <input
+                    type="text"
+                    id="roomExtraFeatures"
+                    placeholder="e.g., Computers with LAN, 3D Printer..."
+                    class="w-full bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container transition-shadow font-body-md"
+                  />
+                </div>
+              </label>
             </div>
           </div>
 
@@ -615,6 +617,18 @@
                 </div></label
               >
             </div>
+
+            <div class="flex flex-col gap-2 mt-4">
+              <label class="font-label-md text-primary font-bold"
+                >Extra Features (Optional)</label
+              >
+              <input
+                type="text"
+                id="roomExtraFeatures"
+                placeholder="e.g., Computers with LAN, 3D Printer..."
+                class="w-full bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-secondary-container transition-shadow font-body-md"
+              />
+            </div>
           </div>
 
           <div
@@ -678,59 +692,30 @@
     <!-- MAIN SCRIPT -->
     <script>
       const API_URL = "http://127.0.0.1:8000";
-      let CURRENT_DEPT_ID = null;
-
       let globalRoomsData = {};
       let currentlyEditingRoomId = null;
 
       const roomsGrid = document.getElementById("mainRoomsGrid");
-      const currentDeptDisplay = document.getElementById("currentDeptDisplay");
-
       const addModal = document.getElementById("addRoomModal");
       const editModal = document.getElementById("editRoomModal");
 
-      // --- FETCH DATA FOR DROPDOWNS ---
-      async function loadDropdownData() {
-        try {
-          const deptRes = await fetch(`${API_URL}/get-departments/`);
-          const deptData = await deptRes.json();
-          const deptSelects = [
-            document.getElementById("roomDept"),
-            document.getElementById("editRoomDept"),
-          ];
+      // We don't even need to listen to departmentReady for Rooms anymore!
+      // Rooms are global to the university now.
+      document.addEventListener("DOMContentLoaded", () => {
+        fetchRooms();
+      });
 
-          if (deptData.data.length > 0 && CURRENT_DEPT_ID === null) {
-            CURRENT_DEPT_ID = deptData.data[0].id;
-            currentDeptDisplay.innerText = deptData.data[0].name;
-          }
-
-          deptData.data.forEach((dept) => {
-            const opt = `<option value="${dept.id}">${dept.name}</option>`;
-            deptSelects.forEach((sel) => (sel.innerHTML += opt));
-          });
-        } catch (err) {
-          console.error("Failed to load departments", err);
-        }
-      }
-
-      // --- FETCH ROOMS ---
+      // --- 1. FETCH GLOBAL ROOMS ---
       async function fetchRooms() {
-        if (!CURRENT_DEPT_ID) {
-          roomsGrid.innerHTML = `<p class="text-on-surface-variant italic col-span-full">Please create a department first.</p>`;
-          return;
-        }
-
         try {
-          const response = await fetch(
-            `${API_URL}/get-rooms/${CURRENT_DEPT_ID}`,
-          );
+          const response = await fetch(`${API_URL}/get-rooms/`);
           const data = await response.json();
 
           roomsGrid.innerHTML = "";
           globalRoomsData = {};
 
           if (data.data.length === 0) {
-            roomsGrid.innerHTML = `<p class="text-on-surface-variant italic col-span-full">No rooms found for this department.</p>`;
+            roomsGrid.innerHTML = `<p class="text-on-surface-variant italic col-span-full">No rooms found in the system.</p>`;
             return;
           }
 
@@ -749,29 +734,35 @@
             if (amenitiesHtml === "")
               amenitiesHtml = `<span class="text-label-sm text-on-surface-variant italic">No special amenities</span>`;
 
+            // Adding the new Extra Features text!
+            const extraFeaturesText = room.extra_features
+              ? `<p class="text-label-sm text-secondary mb-2">★ ${room.extra_features}</p>`
+              : "";
+
             const roomCard = `
-              <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col justify-between hover:-translate-y-1 transition-transform min-h-[220px]">
-                  <div>
-                      <div class="flex justify-between items-start mb-2">
-                          <h4 class="font-headline-md text-xl text-primary leading-tight">${room.name}</h4>
-                          <button onclick="openEditModal(${room.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Room">
-                              <span class="material-symbols-outlined text-[20px]">edit</span>
-                          </button>
-                      </div> 
-                      <hr class="border-t border-surface-variant my-2">
-                      <p class="text-label-md text-on-surface-variant mb-2">${room.room_type}</p>
-                      <p class="text-label-md text-on-surface-variant mb-4">Capacity: ${room.capacity}</p>
-                      <div class="flex gap-4 mb-4 text-primary opacity-80">${amenitiesHtml}</div>
-                  </div>
-                  <div class="flex items-center justify-between mt-auto pt-4 border-t border-surface-variant">
-                      ${
-                        room.is_active
-                          ? `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-label-sm border border-primary"><span class="material-symbols-outlined text-[16px]">check_circle</span> Available</span>`
-                          : `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container text-label-sm border border-primary"><span class="material-symbols-outlined text-[16px]">build</span> Maintenance</span>`
-                      }
-                  </div>
-              </article>
-            `;
+        <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col justify-between hover:-translate-y-1 transition-transform min-h-[220px]">
+            <div>
+                <div class="flex justify-between items-start mb-2">
+                    <h4 class="font-headline-md text-xl text-primary leading-tight">${room.name}</h4>
+                    <button onclick="openEditModal(${room.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Room">
+                        <span class="material-symbols-outlined text-[20px]">edit</span>
+                    </button>
+                </div> 
+                <hr class="border-t border-surface-variant my-2">
+                <p class="text-label-md text-on-surface-variant mb-2">${room.room_type}</p>
+                <p class="text-label-md text-on-surface-variant mb-2">Capacity: ${room.capacity}</p>
+                ${extraFeaturesText}
+                <div class="flex gap-4 mb-4 text-primary opacity-80">${amenitiesHtml}</div>
+            </div>
+            <div class="flex items-center justify-between mt-auto pt-4 border-t border-surface-variant">
+                ${
+                  room.is_active
+                    ? `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-label-sm border border-primary"><span class="material-symbols-outlined text-[16px]">check_circle</span> Available</span>`
+                    : `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container text-label-sm border border-primary"><span class="material-symbols-outlined text-[16px]">build</span> Maintenance</span>`
+                }
+            </div>
+        </article>
+      `;
             roomsGrid.innerHTML += roomCard;
           });
         } catch (error) {
@@ -779,7 +770,7 @@
         }
       }
 
-      // --- ADD ROOM ---
+      // --- 2. ADD ROOM ---
       document
         .getElementById("newRoomForm")
         .addEventListener("submit", async (e) => {
@@ -792,7 +783,6 @@
           statusMsg.classList.add("hidden");
 
           const roomData = {
-            department_id: parseInt(document.getElementById("roomDept").value),
             name: document.getElementById("roomName").value,
             capacity: parseInt(document.getElementById("roomCapacity").value),
             room_type:
@@ -801,6 +791,7 @@
             amenities: Array.from(
               document.querySelectorAll('input[name="amenity"]:checked'),
             ).map((cb) => cb.value),
+            extra_features: document.getElementById("roomExtraFeatures").value, // NEW Custom text
             is_active: true,
           };
 
@@ -817,13 +808,6 @@
               statusMsg.className =
                 "mt-4 font-label-md text-tertiary-container";
               statusMsg.innerText = "✅ Room added successfully!";
-
-              // Switch view
-              CURRENT_DEPT_ID = roomData.department_id;
-              const selectEl = document.getElementById("roomDept");
-              currentDeptDisplay.innerText =
-                selectEl.options[selectEl.selectedIndex].text;
-
               document.getElementById("newRoomForm").reset();
               fetchRooms();
               setTimeout(closeAddModal, 1000);
@@ -841,14 +825,18 @@
           }
         });
 
-      // --- EDIT ROOM ---
+      // --- 3. EDIT ROOM ---
       window.openEditModal = (id) => {
         currentlyEditingRoomId = id;
         const room = globalRoomsData[id];
 
-        document.getElementById("editRoomDept").value = room.department_id;
         document.getElementById("editRoomName").value = room.name;
         document.getElementById("editRoomCapacity").value = room.capacity;
+
+        if (document.getElementById("editRoomExtraFeatures")) {
+          document.getElementById("editRoomExtraFeatures").value =
+            room.extra_features || "";
+        }
 
         const typeRadio = document.querySelector(
           `input[name="editRoomType"][value="${room.room_type}"]`,
@@ -867,7 +855,6 @@
         document.querySelector(
           'input[name="editAmenity"][value="Computers"]',
         ).checked = room.has_computers;
-
         document.getElementById("editRoomIsActive").checked = room.is_active;
 
         editModal.classList.remove("hidden");
@@ -891,9 +878,6 @@
           statusMsg.classList.add("hidden");
 
           const roomData = {
-            department_id: parseInt(
-              document.getElementById("editRoomDept").value,
-            ),
             name: document.getElementById("editRoomName").value,
             capacity: parseInt(
               document.getElementById("editRoomCapacity").value,
@@ -904,6 +888,9 @@
             amenities: Array.from(
               document.querySelectorAll('input[name="editAmenity"]:checked'),
             ).map((cb) => cb.value),
+            extra_features: document.getElementById("editRoomExtraFeatures")
+              ? document.getElementById("editRoomExtraFeatures").value
+              : "",
             is_active: document.getElementById("editRoomIsActive").checked,
           };
 
@@ -919,11 +906,6 @@
             const result = await response.json();
 
             if (response.ok) {
-              CURRENT_DEPT_ID = roomData.department_id;
-              const selectEl = document.getElementById("editRoomDept");
-              currentDeptDisplay.innerText =
-                selectEl.options[selectEl.selectedIndex].text;
-
               fetchRooms();
               closeEditModal();
             } else {
@@ -940,13 +922,12 @@
           }
         });
 
-      // --- DELETE ROOM ---
+      // --- 4. DELETE & MODAL CONTROLS (Unchanged) ---
       document
         .getElementById("deleteRoomBtn")
         .addEventListener("click", async () => {
           const roomName = globalRoomsData[currentlyEditingRoomId].name;
           if (!confirm(`Delete ${roomName}?`)) return;
-
           try {
             const response = await fetch(
               `${API_URL}/delete-room/${currentlyEditingRoomId}`,
@@ -964,7 +945,6 @@
           }
         });
 
-      // --- MODAL CONTROLS ---
       const closeAddModal = () => {
         addModal.classList.add("opacity-0");
         document
@@ -1002,7 +982,6 @@
       addModal.addEventListener("click", (e) => {
         if (e.target === addModal) closeAddModal();
       });
-
       document
         .getElementById("closeEditModalBtn")
         .addEventListener("click", closeEditModal);
@@ -1011,12 +990,6 @@
         .addEventListener("click", closeEditModal);
       editModal.addEventListener("click", (e) => {
         if (e.target === editModal) closeEditModal();
-      });
-
-      // Init Page
-      document.addEventListener("DOMContentLoaded", async () => {
-        await loadDropdownData();
-        fetchRooms();
       });
     </script>
   </body>

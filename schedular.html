@@ -190,7 +190,7 @@
         </a>
 
         <a
-          href="scheduler.html"
+          href="schedular.html"
           class="bg-secondary-container text-on-secondary-container border-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,1)] rounded-lg mx-2 my-1 px-4 py-3 flex items-center gap-3 active:scale-95 transition-transform"
         >
           <span class="material-symbols-outlined">auto_awesome</span>
@@ -341,70 +341,29 @@
 
               <div class="flex flex-col space-y-2">
                 <label class="font-label-md text-primary">Batch Name</label>
-                <div class="relative">
-                  <!-- THE ID MUST BE EXACTLY "target-scope" -->
-                  <select
-                    id="target-scope"
-                    class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:ring-0 appearance-none pr-10"
+                <div class="flex items-center gap-3">
+                  <div class="relative flex-grow">
+                    <select
+                      id="target-scope"
+                      class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:ring-0 appearance-none pr-10"
+                    >
+                      <option value="" disabled selected>
+                        Select Department First
+                      </option>
+                    </select>
+                    <span
+                      class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                      >expand_more</span
+                    >
+                  </div>
+                  <button
+                    type="button"
+                    id="openTimeConfigBtn"
+                    class="bg-secondary-container text-primary p-3 rounded-lg border-2 border-primary offset-shadow-sm active:scale-95 transition-transform hover:bg-[#b0d9f4]"
+                    title="Configure Batch Timings"
                   >
-                    <option value="" disabled selected>
-                      Select Department First
-                    </option>
-                  </select>
-
-                  <span
-                    class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                    >expand_more</span
-                  >
-                </div>
-              </div>
-
-              <div class="flex flex-col space-y-3 mt-4">
-                <label class="font-label-md text-primary font-bold"
-                  >Optimization Constraints</label
-                >
-                <div class="flex flex-col gap-2">
-                  <label class="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      value="no_consecutive"
-                      class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
-                      checked
-                    />
-                    <span class="text-body-md text-on-surface-variant"
-                      >Prevent Back-to-Back same subjects</span
-                    >
-                  </label>
-                  <label class="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      value="strict_faculty_load"
-                      class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
-                    />
-                    <span class="text-body-md text-on-surface-variant"
-                      >Strict Faculty Load (Max 2 classes/day)</span
-                    >
-                  </label>
-                  <label class="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      value="faculty_day_off"
-                      class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
-                    />
-                    <span class="text-body-md text-on-surface-variant"
-                      >Guarantee 1 Day Off per Faculty</span
-                    >
-                  </label>
-                  <label class="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      value="morning_heavy"
-                      class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
-                    />
-                    <span class="text-body-md text-on-surface-variant"
-                      >Prefer Morning Slots (Compact Schedule)</span
-                    >
-                  </label>
+                    <span class="material-symbols-outlined">schedule</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -413,108 +372,52 @@
           <section
             class="bg-white hand-drawn-border offset-shadow p-6 md:p-8 flex flex-col h-full"
           >
-            <div
-              class="flex items-center justify-between mb-6 border-b-2 border-surface-variant pb-4"
-            >
-              <div class="flex items-center gap-3">
-                <span class="material-symbols-outlined text-primary text-2xl"
-                  >checklist</span
-                >
-                <h4 class="font-headline-md text-2xl text-primary">
-                  Pre-Flight Checks
-                </h4>
-              </div>
-              <span
-                class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-surface-container text-on-surface-variant text-label-sm border border-outline-variant"
+            <div class="flex flex-col space-y-3 mt-4">
+              <label class="font-label-md text-primary font-bold"
+                >Optimization Constraints</label
               >
-                Live Status
-              </span>
-            </div>
-
-            <div class="space-y-4 max-h-[300px] overflow-y-auto pr-2 flex-grow">
-              <div
-                class="flex items-start gap-4 pb-4 border-b border-surface-variant last:border-0"
-              >
-                <div
-                  class="bg-tertiary-fixed border border-primary p-1.5 rounded-md mt-0.5 shrink-0"
-                >
-                  <span
-                    class="material-symbols-outlined text-on-tertiary-fixed-variant text-[20px]"
-                    >check</span
+              <div class="flex flex-col gap-2">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    value="no_consecutive"
+                    class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
+                    checked
+                  />
+                  <span class="text-body-md text-on-surface-variant"
+                    >Prevent Back-to-Back same subjects</span
                   >
-                </div>
-                <div class="flex flex-col">
-                  <p class="font-label-md text-primary">
-                    Faculty Expertise Mapped
-                  </p>
-                  <p class="text-body-md text-sm text-on-surface-variant">
-                    142/142 subjects have primary and backup professors
-                    assigned.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                class="flex items-start gap-4 pb-4 border-b border-surface-variant last:border-0"
-              >
-                <div
-                  class="bg-tertiary-fixed border border-primary p-1.5 rounded-md mt-0.5 shrink-0"
-                >
-                  <span
-                    class="material-symbols-outlined text-on-tertiary-fixed-variant text-[20px]"
-                    >check</span
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    value="strict_faculty_load"
+                    class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
+                  />
+                  <span class="text-body-md text-on-surface-variant"
+                    >Strict Faculty Load (Max 2 classes/day)</span
                   >
-                </div>
-                <div class="flex flex-col">
-                  <p class="font-label-md text-primary">
-                    Room Capacity Verified
-                  </p>
-                  <p class="text-body-md text-sm text-on-surface-variant">
-                    All 28 batches fit within currently active room sizes.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                class="flex items-start gap-4 pb-4 border-b border-surface-variant last:border-0"
-              >
-                <div
-                  class="bg-[#FFE194] border border-primary p-1.5 rounded-md mt-0.5 shrink-0"
-                >
-                  <span
-                    class="material-symbols-outlined text-primary text-[20px]"
-                    >warning</span
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    value="faculty_day_off"
+                    class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
+                  />
+                  <span class="text-body-md text-on-surface-variant"
+                    >Guarantee 1 Day Off per Faculty</span
                   >
-                </div>
-                <div class="flex flex-col">
-                  <p class="font-label-md text-primary">
-                    Tight Workload Threshold
-                  </p>
-                  <p class="text-body-md text-sm text-on-surface-variant">
-                    Computer Science faculty are currently at 94% of max weekly
-                    hours.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                class="flex items-start gap-4 pb-4 border-b border-surface-variant last:border-0"
-              >
-                <div
-                  class="bg-[#FFE194] border border-primary p-1.5 rounded-md mt-0.5 shrink-0"
-                >
-                  <span
-                    class="material-symbols-outlined text-primary text-[20px]"
-                    >warning</span
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    value="morning_heavy"
+                    class="rule-checkbox w-5 h-5 text-primary border-outline-variant rounded focus:ring-primary"
+                  />
+                  <span class="text-body-md text-on-surface-variant"
+                    >Prefer Morning Slots (Compact Schedule)</span
                   >
-                </div>
-                <div class="flex flex-col">
-                  <p class="font-label-md text-primary">Lab 402 Maintenance</p>
-                  <p class="text-body-md text-sm text-on-surface-variant">
-                    Engine will route required lab sessions to secondary
-                    locations.
-                  </p>
-                </div>
+                </label>
               </div>
             </div>
           </section>
@@ -588,12 +491,93 @@
         <span class="font-label-sm text-[10px]">Staff</span>
       </a>
     </nav>
+
+    <div
+      id="timeConfigModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm opacity-0 hidden transition-opacity duration-300"
+    >
+      <div
+        id="timeConfigModalContent"
+        class="bg-surface w-[90%] max-w-sm hand-drawn-border-sm offset-shadow-sm p-6 transform scale-95 transition-transform duration-300"
+      >
+        <h3
+          class="font-headline-md text-2xl text-primary mb-4 flex items-center gap-2"
+        >
+          <span class="material-symbols-outlined">schedule</span> Batch Timings
+        </h3>
+
+        <div class="space-y-4">
+          <div class="flex flex-col">
+            <label class="font-label-sm text-on-surface-variant"
+              >Day Start (Hour)</label
+            >
+            <input
+              type="number"
+              id="customStartTime"
+              value="8"
+              min="6"
+              max="12"
+              class="bg-white border-2 border-primary rounded-md p-2 w-full"
+            />
+            <span class="text-xs text-outline mt-1">e.g., 8 for 8:00 AM</span>
+          </div>
+          <div class="flex flex-col">
+            <label class="font-label-sm text-on-surface-variant"
+              >Day End (Hour)</label
+            >
+            <input
+              type="number"
+              id="customEndTime"
+              value="16"
+              min="12"
+              max="20"
+              class="bg-white border-2 border-primary rounded-md p-2 w-full"
+            />
+            <span class="text-xs text-outline mt-1">e.g., 16 for 4:00 PM</span>
+          </div>
+          <div class="flex flex-col">
+            <label class="font-label-sm text-on-surface-variant"
+              >Break Time (Hour)</label
+            >
+            <input
+              type="number"
+              id="customBreakTime"
+              value="12"
+              min="10"
+              max="15"
+              class="bg-white border-2 border-primary rounded-md p-2 w-full"
+            />
+            <span class="text-xs text-outline mt-1"
+              >e.g., 12 for 12:00 PM - 1:00 PM Break</span
+            >
+          </div>
+        </div>
+
+        <div
+          class="flex justify-end gap-3 mt-6 pt-4 border-t border-surface-variant"
+        >
+          <button
+            id="closeTimeConfigBtn"
+            class="px-4 py-2 font-label-md text-primary hover:bg-surface-container rounded-md"
+          >
+            Cancel
+          </button>
+          <button
+            id="saveTimeConfigBtn"
+            class="bg-primary text-on-primary px-4 py-2 rounded-md font-label-md offset-shadow-sm active:scale-95"
+          >
+            Save Timings
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script>
       const API_URL = "http://127.0.0.1:8000";
 
       document.addEventListener("DOMContentLoaded", async () => {
         const deptDropdown = document.getElementById("facultyDept");
-        const scopeSelect = document.getElementById("target-scope");
+        const scopeSelect = document.getElementById("target-scope"); // This is the Batch Dropdown
         const generateBtn = document.getElementById("generate-btn");
 
         // 1. Fetch Dynamic Departments
@@ -622,16 +606,14 @@
             const result = await response.json();
 
             // Clear the loading text
-            scopeSelect.innerHTML = `<option value="" disabled selected>Select a Batch...</option>`;
+            scopeSelect.innerHTML = `<option value="all">Entire Department</option>`;
 
             // Check if the department actually has batches
             if (result.data && result.data.length > 0) {
-              // Inject the new batches
               result.data.forEach((batch) => {
                 scopeSelect.innerHTML += `<option value="${batch.id}">${batch.name}</option>`;
               });
             } else {
-              // Tell the user if it's empty
               scopeSelect.innerHTML = `<option value="" disabled selected>No batches in this department</option>`;
             }
           } catch (error) {
@@ -640,10 +622,56 @@
           }
         });
 
+        const timeModal = document.getElementById("timeConfigModal");
+        const timeModalContent = document.getElementById(
+          "timeConfigModalContent",
+        );
+
+        let batchConfig = { start: 8, end: 16, break: 12 }; // Default values
+
+        document
+          .getElementById("openTimeConfigBtn")
+          .addEventListener("click", () => {
+            timeModal.classList.remove("hidden");
+            setTimeout(() => {
+              timeModal.classList.remove("opacity-0");
+              timeModalContent.classList.remove("scale-95");
+            }, 10);
+          });
+
+        const closeTimeModal = () => {
+          timeModal.classList.add("opacity-0");
+          timeModalContent.classList.add("scale-95");
+          setTimeout(() => timeModal.classList.add("hidden"), 300);
+        };
+
+        document
+          .getElementById("closeTimeConfigBtn")
+          .addEventListener("click", closeTimeModal);
+
+        document
+          .getElementById("saveTimeConfigBtn")
+          .addEventListener("click", () => {
+            batchConfig.start = parseInt(
+              document.getElementById("customStartTime").value,
+            );
+            batchConfig.end = parseInt(
+              document.getElementById("customEndTime").value,
+            );
+            batchConfig.break = parseInt(
+              document.getElementById("customBreakTime").value,
+            );
+            closeTimeModal();
+            alert("Custom timings saved for generation.");
+          });
+
         // 2. Generation Engine Trigger
         if (generateBtn) {
           generateBtn.addEventListener("click", async function () {
             const departmentId = deptDropdown.value;
+
+            // ---> THE FIX: We must grab the selected Batch ID! <---
+            const batchId = scopeSelect.value;
 
             if (departmentId === "global" || !departmentId) {
               alert(
@@ -652,7 +680,7 @@
               return;
             }
 
-            // --- GRAB ALL CHECKED CONSTRAINTS FROM THE UI ---
+            // Grab all checked constraints
             const checkedConstraints = Array.from(
               document.querySelectorAll(".rule-checkbox:checked"),
             ).map((cb) => cb.value);
@@ -666,14 +694,20 @@
             `;
             this.disabled = true;
 
-            // API Call to Python Solver WITH CONSTRAINTS PAYLOAD
+            // API Call to Python Solver
             try {
               const response = await fetch(
                 `${API_URL}/generate-timetable/${departmentId}`,
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ constraints: checkedConstraints }), // <-- SENDING DATA HERE
+                  body: JSON.stringify({
+                    constraints: checkedConstraints,
+                    batch_id: batchId,
+                    start_hour: batchConfig.start,
+                    end_hour: batchConfig.end,
+                    break_hour: batchConfig.break,
+                  }),
                 },
               );
 
@@ -681,9 +715,19 @@
 
               if (data.success) {
                 alert(
-                  `Engine Success! ${data.total_lectures_scheduled} lectures optimally scheduled.`,
+                  `Engine Success! ${data.total_lectures_scheduled} lectures optimally scheduled. Redirecting to Draft Review...`,
                 );
-                window.location.href = "timetable.html"; // Redirect to view
+
+                // SAVE TO BROWSER MEMORY
+                sessionStorage.setItem(
+                  "draftSchedule",
+                  JSON.stringify(data.draft_schedule),
+                );
+                sessionStorage.setItem("draftBatchId", batchId);
+                sessionStorage.setItem("draftDeptId", departmentId);
+
+                // Redirect with draft=true
+                window.location.href = `timetable.html?draft=true`;
               } else {
                 alert("Engine Failed: " + data.message);
               }

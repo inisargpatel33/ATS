@@ -126,11 +126,18 @@
           ><span class="font-label-md">Subjects</span></a
         >
         <a
-          href="scheduler.html"
+          href="schedular.html"
           class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
           ><span class="material-symbols-outlined">auto_awesome</span
           ><span class="font-label-md">Scheduler</span></a
         >
+        <a
+          href="timetable.html"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
+        >
+          <span class="material-symbols-outlined">calendar_month</span>
+          <span class="font-label-md">Timetables</span>
+        </a>
       </nav>
     </aside>
 
@@ -143,6 +150,18 @@
             class="font-headline-lg text-2xl md:text-3xl text-primary tracking-tight"
             >SmartSched Uni</span
           >
+        </div>
+
+        <div
+          class="flex items-center gap-3 bg-white hand-drawn-border-sm offset-shadow-sm px-3 py-2"
+        >
+          <span class="material-symbols-outlined text-primary">apartment</span>
+          <select
+            id="globalDeptSelect"
+            class="bg-transparent border-none focus:ring-0 text-body-md font-bold text-primary appearance-none cursor-pointer outline-none w-48"
+          >
+            <option value="" disabled selected>Loading Departments...</option>
+          </select>
         </div>
       </header>
 
@@ -170,16 +189,6 @@
         </section>
 
         <!-- Current Department Indicator -->
-        <div
-          class="flex justify-between items-center mb-6 pb-2 border-b-2 border-surface-variant"
-        >
-          <p class="font-label-md text-on-surface-variant">
-            Showing subjects for:
-            <strong id="currentDeptDisplay" class="text-primary"
-              >Loading...</strong
-            >
-          </p>
-        </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
           <!-- Add Subject Form -->
@@ -194,27 +203,6 @@
             </h3>
 
             <form id="newSubjectForm" class="space-y-5">
-              <div class="flex flex-col space-y-2">
-                <label class="font-label-md text-primary font-bold"
-                  >Department <span class="text-error">*</span></label
-                >
-                <div class="relative">
-                  <select
-                    id="subjectDept"
-                    required
-                    class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container appearance-none pr-10"
-                  >
-                    <option value="" disabled selected>
-                      Select Department...
-                    </option>
-                  </select>
-                  <span
-                    class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                    >expand_more</span
-                  >
-                </div>
-              </div>
-
               <div class="flex flex-col space-y-2">
                 <label class="font-label-md text-primary font-bold"
                   >Subject Name <span class="text-error">*</span></label
@@ -339,23 +327,6 @@
         </div>
 
         <form id="editSubjectForm" class="space-y-6">
-          <div class="flex flex-col space-y-2">
-            <label class="font-label-md text-primary font-bold"
-              >Department <span class="text-error">*</span></label
-            >
-            <div class="relative">
-              <select
-                id="editSubjectDept"
-                required
-                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container appearance-none pr-10"
-              ></select>
-              <span
-                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
-                >expand_more</span
-              >
-            </div>
-          </div>
-
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
               >Subject Name <span class="text-error">*</span></label
@@ -448,34 +419,15 @@
       let currentlyEditingSubjectId = null;
 
       const subjectTableBody = document.getElementById("subjectTableBody");
-      const currentDeptDisplay = document.getElementById("currentDeptDisplay");
       const editModal = document.getElementById("editSubjectModal");
 
-      // --- INITIALIZE & FETCH DEPARTMENTS ---
-      async function loadDropdownData() {
-        try {
-          const deptRes = await fetch(`${API_URL}/get-departments/`);
-          const deptData = await deptRes.json();
-          const deptSelects = [
-            document.getElementById("subjectDept"),
-            document.getElementById("editSubjectDept"),
-          ];
+      // --- 1. LISTEN TO GLOBAL HEADER DROPDOWN ---
+      window.addEventListener("departmentReady", (e) => {
+        CURRENT_DEPT_ID = parseInt(e.detail);
+        fetchSubjects(); // Load subjects for this specific department
+      });
 
-          if (deptData.data.length > 0 && CURRENT_DEPT_ID === null) {
-            CURRENT_DEPT_ID = deptData.data[0].id;
-            currentDeptDisplay.innerText = deptData.data[0].name;
-          }
-
-          deptData.data.forEach((dept) => {
-            const opt = `<option value="${dept.id}">${dept.name}</option>`;
-            deptSelects.forEach((sel) => (sel.innerHTML += opt));
-          });
-        } catch (err) {
-          console.error("Failed to load departments", err);
-        }
-      }
-
-      // --- FETCH SUBJECTS ---
+      // --- 2. FETCH SUBJECTS ---
       async function fetchSubjects() {
         if (!CURRENT_DEPT_ID) {
           subjectTableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-on-surface-variant italic">Please create a department first.</td></tr>`;
@@ -499,7 +451,6 @@
           data.data.forEach((subject) => {
             globalSubjectsData[subject.id] = subject;
 
-            // Visual pill based on type
             let typePillClass =
               "bg-surface-container text-on-surface-variant border-outline-variant";
             if (subject.subject_type === "Practical")
@@ -510,19 +461,19 @@
                 "bg-tertiary-fixed text-on-tertiary-fixed-variant border-primary";
 
             const row = `
-              <tr class="hover:bg-surface-container-lowest transition-colors">
-                <td class="py-4 px-4 font-label-md text-primary font-bold">${subject.name}</td>
-                <td class="py-4 px-4 text-center">
-                  <span class="inline-flex px-3 py-1 rounded-full text-label-sm border ${typePillClass}">${subject.subject_type}</span>
-                </td>
-                <td class="py-4 px-4 text-on-surface-variant text-center">${subject.required_sessions}</td>
-                <td class="py-4 px-4 text-center">
-                  <button onclick="openEditSubjectModal(${subject.id})" class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors" title="Edit">
-                    <span class="material-symbols-outlined text-[20px]">edit</span>
-                  </button>
-                </td>
-              </tr>
-            `;
+        <tr class="hover:bg-surface-container-lowest transition-colors">
+          <td class="py-4 px-4 font-label-md text-primary font-bold">${subject.name}</td>
+          <td class="py-4 px-4 text-center">
+            <span class="inline-flex px-3 py-1 rounded-full text-label-sm border ${typePillClass}">${subject.subject_type}</span>
+          </td>
+          <td class="py-4 px-4 text-on-surface-variant text-center">${subject.required_sessions}</td>
+          <td class="py-4 px-4 text-center">
+            <button onclick="openEditSubjectModal(${subject.id})" class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors" title="Edit">
+              <span class="material-symbols-outlined text-[20px]">edit</span>
+            </button>
+          </td>
+        </tr>
+      `;
             subjectTableBody.innerHTML += row;
           });
         } catch (error) {
@@ -530,7 +481,7 @@
         }
       }
 
-      // --- ADD SUBJECT ---
+      // --- 3. ADD SUBJECT ---
       document
         .getElementById("newSubjectForm")
         .addEventListener("submit", async (e) => {
@@ -543,9 +494,7 @@
           statusMsg.classList.add("hidden");
 
           const subjectData = {
-            department_id: parseInt(
-              document.getElementById("subjectDept").value,
-            ),
+            department_id: CURRENT_DEPT_ID, // <-- Uses Global ID automatically!
             name: document.getElementById("subjectName").value,
             subject_type: document.getElementById("subjectType").value,
             required_sessions: parseInt(
@@ -566,13 +515,6 @@
               statusMsg.className =
                 "mt-4 font-label-md text-tertiary-container";
               statusMsg.innerText = "✅ Subject saved successfully!";
-
-              // Switch view to updated department
-              CURRENT_DEPT_ID = subjectData.department_id;
-              const selectEl = document.getElementById("subjectDept");
-              currentDeptDisplay.innerText =
-                selectEl.options[selectEl.selectedIndex].text;
-
               document.getElementById("newSubjectForm").reset();
               fetchSubjects();
             } else {
@@ -589,13 +531,11 @@
           }
         });
 
-      // --- EDIT SUBJECT ---
+      // --- 4. EDIT SUBJECT ---
       window.openEditSubjectModal = (id) => {
         currentlyEditingSubjectId = id;
         const subject = globalSubjectsData[id];
 
-        document.getElementById("editSubjectDept").value =
-          subject.department_id;
         document.getElementById("editSubjectName").value = subject.name;
         document.getElementById("editSubjectType").value = subject.subject_type;
         document.getElementById("editSubjectSessions").value =
@@ -622,9 +562,7 @@
           statusMsg.classList.add("hidden");
 
           const subjectData = {
-            department_id: parseInt(
-              document.getElementById("editSubjectDept").value,
-            ),
+            department_id: CURRENT_DEPT_ID, // <-- Uses Global ID automatically!
             name: document.getElementById("editSubjectName").value,
             subject_type: document.getElementById("editSubjectType").value,
             required_sessions: parseInt(
@@ -644,11 +582,6 @@
             const result = await response.json();
 
             if (response.ok) {
-              CURRENT_DEPT_ID = subjectData.department_id;
-              const selectEl = document.getElementById("editSubjectDept");
-              currentDeptDisplay.innerText =
-                selectEl.options[selectEl.selectedIndex].text;
-
               fetchSubjects();
               closeEditModal();
             } else {
@@ -665,7 +598,7 @@
           }
         });
 
-      // --- DELETE SUBJECT ---
+      // --- 5. DELETE & MODAL CONTROLS ---
       document
         .getElementById("deleteSubjectBtn")
         .addEventListener("click", async () => {
@@ -677,7 +610,6 @@
             )
           )
             return;
-
           try {
             const response = await fetch(
               `${API_URL}/delete-subject/${currentlyEditingSubjectId}`,
@@ -695,7 +627,6 @@
           }
         });
 
-      // --- MODAL CONTROLS ---
       const closeEditModal = () => {
         editModal.classList.add("opacity-0");
         document
@@ -714,12 +645,8 @@
       editModal.addEventListener("click", (e) => {
         if (e.target === editModal) closeEditModal();
       });
-
-      // Init Page
-      document.addEventListener("DOMContentLoaded", async () => {
-        await loadDropdownData();
-        fetchSubjects();
-      });
     </script>
+
+    <script src="global.js"></script>
   </body>
 </html>

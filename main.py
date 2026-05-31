@@ -1,12 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, field_validator
+from typing import List, Optional
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import errors
 from ortools.sat.python import cp_model
-from pydantic import BaseModel
-from typing import List
-from typing import Optional
-import psycopg2.errors
+from psycopg2 import pool # NEW: Import the pool module
+# from contextlib import contextmanager # NEW: For safe connection handling
+
+# =========================================================
+# FASTAPI APP
+# =========================================================
+
 app = FastAPI(title="Timetable SaaS API")
 
 app.add_middleware(
@@ -17,834 +23,1013 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#  =========================================================
+# DATABASE CONNECTION POOL
+# =========================================================
 DATABASE_URL = "postgresql://postgres:Nsrg%4033patel@db.rxseblfkhgyzuimejnmu.supabase.co:5432/postgres"
 
+# Initialize a Threaded Connection Pool (Min 1, Max 20 connections)
+# This keeps connections "warm" and ready for instant use across FastAPI threads.
+try:
+    db_pool = psycopg2.pool.ThreadedConnectionPool(
+        minconn=1,
+        maxconn=20,
+        dsn=DATABASE_URL,
+        cursor_factory=RealDictCursor
+    )
+    print("✅ Database Connection Pool initialized successfully!")
+except Exception as e:
+    print("❌ Failed to initialize connection pool:", e)
+    db_pool = None
+    
 def get_db_connection():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    if db_pool is None:
+        raise HTTPException("Database connection pool is not available")
+    return db_pool.getconn()
 
-# ==========================================
-# DATA MODELS
-# ==========================================
-class RoomCreate(BaseModel):
-    name: str
-    capacity: int
-    room_type: str
-    amenities: List[str]
-    is_active: bool = True
-    department_id: int
-    
-    
-    
-    
+def release_db_connection(conn):
+    if db_pool and conn:
+        db_pool.putconn(conn)
+        
+
+# =========================================================
+# CONSTANTS
+# =========================================================
+
+# CHANGE:
+# Centralized shift slot configuration.
+SHIFT_SLOTS = {
+    "Morning": [
+        "08:00 AM - 09:00 AM",
+        "09:00 AM - 10:00 AM",
+        "10:00 AM - 11:00 AM",
+        "12:00 PM - 01:00 PM",
+        "01:00 PM - 02:00 PM"
+    ],
+    "Afternoon": [
+        "12:00 PM - 01:00 PM",
+        "01:00 PM - 02:00 PM",
+        "02:00 PM - 03:00 PM",
+        "04:00 PM - 05:00 PM",
+        "05:00 PM - 06:00 PM"
+    ]
+}
+
+DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+
+
+# =========================================================
+# MODELS
+# =========================================================
+
 class DeptCreate(BaseModel):
     name: str
 
-# --- DEPARTMENT API ROUTES ---
 
-@app.post("/add-department/")
-def add_department(dept: DeptCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO departments (name) VALUES (%s) RETURNING id;", (dept.name,))
-        conn.commit()
-        return {"success": True, "message": "Added successfully!"}
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Department already exists.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.get("/get-departments/")
-def get_departments():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT * FROM departments ORDER BY id ASC;")
-        return {"data": cursor.fetchall()}
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.delete("/delete-department/{dept_id}")
-def delete_department(dept_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM departments WHERE id = %s RETURNING id;", (dept_id,))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Department not found.")
-        conn.commit()
-        return {"success": True, "message": "Deleted"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-# ==========================================
-# FACULTY API
-# ==========================================
 class FacultyCreate(BaseModel):
     department_id: int
     name: str
     max_weekly_hours: int = 15
 
-@app.post("/add-faculty/")
-def add_faculty(faculty: FacultyCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            INSERT INTO faculties (department_id, name, max_weekly_hours)
-            VALUES (%s, %s, %s) RETURNING id;
-        """, (faculty.department_id, faculty.name, faculty.max_weekly_hours))
-        conn.commit()
-        return {"success": True, "message": "Faculty added successfully!"}
-        
-    except psycopg2.errors.CheckViolation:
-        # Catches the (max_weekly_hours > 0 AND <= 40) constraint
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Weekly hours must be between 1 and 40.")
-    except psycopg2.errors.UniqueViolation:
-        # Catches the UNIQUE (department_id, name) constraint
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="This faculty member already exists in this department.")
-    except psycopg2.errors.ForeignKeyViolation:
-        # Catches if the department ID doesn't exist
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Invalid Department selected.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-# @app.get("/get-faculties/")
-# def get_faculties():
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
-#     try:
-#         # JOIN with departments so we can display the actual department name in the UI
-#         cursor.execute("""
-#             SELECT f.id, f.name, f.max_weekly_hours, d.name as department_name 
-#             FROM faculties f
-#             JOIN departments d ON f.department_id = d.id
-#             ORDER BY f.id ASC;
-#         """)
-#         return {"data": cursor.fetchall()}
-#     finally:
-#         cursor.close()
-#         conn.close()
-
-@app.get("/get-faculties/")
-def get_faculties():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # 1. Get all faculties and their departments
-        cursor.execute("""
-            SELECT f.id, f.name, f.max_weekly_hours, f.department_id, d.name as department_name 
-            FROM faculties f
-            JOIN departments d ON f.department_id = d.id
-            ORDER BY f.id ASC;
-        """)
-        faculties = cursor.fetchall()
-        
-        # 2. Get all expertise mappings and subject names
-        cursor.execute("""
-            SELECT fe.faculty_id, s.name as subject_name, fe.competency_tier
-            FROM faculty_expertise fe
-            JOIN subjects s ON fe.subject_id = s.id;
-        """)
-        expertise_records = cursor.fetchall()
-        
-        # 3. Group the subjects by faculty_id
-        exp_map = {}
-        for exp in expertise_records:
-            fid = exp['faculty_id']
-            if fid not in exp_map:
-                exp_map[fid] = {'primary': [], 'secondary': []}
-                
-            if float(exp['competency_tier']) == 1.0:
-                exp_map[fid]['primary'].append(exp['subject_name'])
-            else:
-                exp_map[fid]['secondary'].append(exp['subject_name'])
-                
-        # 4. Attach the grouped subjects to the faculty data
-        for f in faculties:
-            fid = f['id']
-            f['primary_subjects'] = exp_map.get(fid, {}).get('primary', [])
-            f['secondary_subjects'] = exp_map.get(fid, {}).get('secondary', [])
-            
-        return {"data": faculties}
-    except Exception as e:
-        print("--- FETCH FACULTIES ERROR ---")
-        print(e)
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-        
-
-@app.delete("/delete-faculty/{faculty_id}")
-def delete_faculty(faculty_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM faculties WHERE id = %s RETURNING id;", (faculty_id,))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Faculty not found.")
-        conn.commit()
-        return {"success": True, "message": "Deleted"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-        
-        
-# ==========================================
-# ROOMS API
-# ==========================================
-# ==========================================
-# ROOMS API
-# ==========================================
 class RoomCreate(BaseModel):
     name: str
     capacity: int
     room_type: str
     amenities: List[str]
+    extra_features: Optional[str] = ""  # <-- Added this
     is_active: bool = True
-    department_id: int
+    # department_id: int <-- REMOVED THIS
 
-@app.post("/add-room/")
-def add_room(room: RoomCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        has_proj = "Projector" in room.amenities
-        has_ac = "AC" in room.amenities
-        has_wb = "Whiteboard" in room.amenities
-        has_comp = "Computers" in room.amenities
-
-        cursor.execute("""
-            INSERT INTO rooms (
-                name, capacity, room_type, department_id,
-                has_projector, has_ac, has_whiteboard, has_computers, is_active
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;
-        """, (
-            room.name, room.capacity, room.room_type, room.department_id,
-            has_proj, has_ac, has_wb, has_comp, room.is_active
-        ))
-        conn.commit()
-        return {"success": True, "message": f"Room '{room.name}' added successfully!"}
-        
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="A room with this exact name already exists.")
-    except psycopg2.errors.CheckViolation as e:
-        conn.rollback()
-        err_str = str(e).lower()
-        if "capacity" in err_str:
-            detail = "Room capacity must be greater than 0."
-        else:
-            detail = "Invalid room type selected."
-        raise HTTPException(status_code=400, detail=detail)
-    except psycopg2.errors.ForeignKeyViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Invalid Department selected.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.get("/get-rooms/{department_id}")
-def get_rooms(department_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT * FROM rooms WHERE department_id = %s ORDER BY name ASC", (department_id,))
-        return {"data": cursor.fetchall()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.put("/edit-room/{room_id}")
-def edit_room(room_id: int, room: RoomCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        has_proj = "Projector" in room.amenities
-        has_ac = "AC" in room.amenities
-        has_wb = "Whiteboard" in room.amenities
-        has_comp = "Computers" in room.amenities
-
-        cursor.execute("""
-            UPDATE rooms 
-            SET name = %s, capacity = %s, room_type = %s, department_id = %s,
-                has_projector = %s, has_ac = %s, has_whiteboard = %s, has_computers = %s, is_active = %s
-            WHERE id = %s RETURNING id;
-        """, (
-            room.name, room.capacity, room.room_type, room.department_id,
-            has_proj, has_ac, has_wb, has_comp, room.is_active, room_id
-        ))
-        
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Room not found.")
-            
-        conn.commit()
-        return {"success": True, "message": "Room updated successfully!"}
-        
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="A room with this exact name already exists.")
-    except psycopg2.errors.CheckViolation as e:
-        conn.rollback()
-        err_str = str(e).lower()
-        if "capacity" in err_str:
-            detail = "Room capacity must be greater than 0."
-        else:
-            detail = "Invalid room type selected."
-        raise HTTPException(status_code=400, detail=detail)
-    except psycopg2.errors.ForeignKeyViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Invalid Department selected.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.delete("/delete-room/{room_id}")
-def delete_room(room_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM rooms WHERE id = %s RETURNING id;", (room_id,))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Room not found.")
-        conn.commit()
-        return {"success": True, "message": "Room deleted successfully!"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
 
 class BatchCreate(BaseModel):
     name: str
     student_count: int
     mentor_id: Optional[int] = None
     department_id: int
-    shift: str = "Morning"  # Add this line
+    shift: str = "Morning"
+
+    # CHANGE:
+    # Added shift validation.
+    @field_validator("shift")
+    @classmethod
+    def validate_shift(cls, v):
+        if v not in ["Morning", "Afternoon"]:
+            raise ValueError("Shift must be Morning or Afternoon")
+        return v
 
 
-@app.post("/add-batch/")
-def add_batch(batch: BatchCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            INSERT INTO batches (name, student_count, mentor_id, department_id)
-            VALUES (%s, %s, %s, %s) RETURNING id;
-        """, (batch.name, batch.student_count, batch.mentor_id, batch.department_id))
-        conn.commit()
-        return {"success": True, "message": f"Batch '{batch.name}' added successfully!"}
-        
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="A batch with this name already exists in this department.")
-    except psycopg2.errors.CheckViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Student count must be greater than 0.")
-    except psycopg2.errors.ForeignKeyViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Invalid Department or Mentor selected.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.get("/get-batches/{department_id}")
-def get_batches(department_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Use LEFT JOIN because mentor_id can be NULL
-        cursor.execute("""
-           SELECT b.id, b.name, b.student_count, b.shift, b.department_id, b.mentor_id, f.name AS mentor_name
-           FROM batches b
-            LEFT JOIN faculties f ON b.mentor_id = f.id
-            WHERE b.department_id = %s 
-            ORDER BY b.name ASC;
-        """, (department_id,))
-        return {"data": cursor.fetchall()}
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.put("/edit-batch/{batch_id}")
-def edit_batch(batch_id: int, batch: BatchCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            UPDATE batches 
-            SET name = %s, student_count = %s, mentor_id = %s, department_id = %s
-            WHERE id = %s RETURNING id;
-        """, (batch.name, batch.student_count, batch.mentor_id, batch.department_id, batch_id))
-        
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Batch not found.")
-            
-        conn.commit()
-        return {"success": True, "message": f"Batch '{batch.name}' updated successfully!"}
-        
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="A batch with this name already exists in this department.")
-    except psycopg2.errors.CheckViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Student count must be greater than 0.")
-    except psycopg2.errors.ForeignKeyViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Invalid Department or Mentor selected.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.delete("/delete-batch/{batch_id}")
-def delete_batch(batch_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM batches WHERE id = %s RETURNING id;", (batch_id,))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Batch not found")
-        conn.commit()
-        return {"success": True, "message": "Batch deleted successfully!"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-# ==========================================
-# SUBJECTS API
-# ==========================================
 class SubjectCreate(BaseModel):
     name: str
     subject_type: str
     required_sessions: int
     department_id: int
 
-@app.post("/add-subject/")
-def add_subject(subject: SubjectCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            INSERT INTO subjects (name, subject_type, required_sessions, department_id)
-            VALUES (%s, %s, %s, %s) RETURNING id;
-        """, (subject.name, subject.subject_type, subject.required_sessions, subject.department_id))
-        conn.commit()
-        return {"success": True, "message": f"Subject '{subject.name}' added successfully!"}
-        
-    except psycopg2.errors.CheckViolation as e:
-        conn.rollback()
-        error_msg = str(e).lower()
-        if "subject_type" in error_msg:
-            detail = "Invalid subject type. Must be 'Theory', 'Practical', or 'Seminar'."
-        else:
-            detail = "Required sessions must be between 1 and 10."
-        raise HTTPException(status_code=400, detail=detail)
-    except psycopg2.errors.ForeignKeyViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Invalid Department selected.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
 
-@app.get("/get-subjects/{department_id}")
-def get_subjects(department_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # We join with departments so the UI can display the department name
-        cursor.execute("""
-            SELECT s.id, s.name, s.subject_type, s.required_sessions, s.department_id, d.name AS department_name
-            FROM subjects s
-            JOIN departments d ON s.department_id = d.id
-            WHERE s.department_id = %s 
-            ORDER BY s.name ASC;
-        """, (department_id,))
-        return {"data": cursor.fetchall()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.put("/edit-subject/{subject_id}")
-def edit_subject(subject_id: int, subject: SubjectCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            UPDATE subjects 
-            SET name = %s, subject_type = %s, required_sessions = %s, department_id = %s
-            WHERE id = %s RETURNING id;
-        """, (subject.name, subject.subject_type, subject.required_sessions, subject.department_id, subject_id))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Subject not found")
-        conn.commit()
-        return {"success": True, "message": "Subject updated successfully!"}
-        
-    except psycopg2.errors.CheckViolation as e:
-        conn.rollback()
-        error_msg = str(e).lower()
-        if "subject_type" in error_msg:
-            detail = "Invalid subject type. Must be 'Theory', 'Practical', or 'Seminar'."
-        else:
-            detail = "Required sessions must be between 1 and 10."
-        raise HTTPException(status_code=400, detail=detail)
-    except psycopg2.errors.ForeignKeyViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Invalid Department selected.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.delete("/delete-subject/{subject_id}")
-def delete_subject(subject_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM subjects WHERE id = %s RETURNING id;", (subject_id,))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Subject not found")
-        conn.commit()
-        return {"success": True, "message": "Subject deleted successfully!"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# ==========================================
-# FACULTY EXPERTISE API
-# ==========================================
 class ExpertiseCreate(BaseModel):
     faculty_id: int
     subject_id: int
     competency_tier: float
 
-@app.post("/add-expertise/")
-def add_expertise(exp: ExpertiseCreate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            INSERT INTO faculty_expertise (faculty_id, subject_id, competency_tier)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (faculty_id, subject_id) 
-            DO UPDATE SET competency_tier = EXCLUDED.competency_tier;
-        """, (exp.faculty_id, exp.subject_id, exp.competency_tier))
-        conn.commit()
-        return {"success": True, "message": "Expertise mapped successfully!"}
-    except psycopg2.errors.CheckViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Competency tier must be 1.0 or 0.5.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
 
-@app.get("/get-expertise/{faculty_id}")
-def get_faculty_expertise(faculty_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            SELECT s.id, s.name, fe.competency_tier 
-            FROM faculty_expertise fe
-            JOIN subjects s ON fe.subject_id = s.id
-            WHERE fe.faculty_id = %s;
-        """, (faculty_id,))
-        return {"data": cursor.fetchall()}
-    finally:
-        cursor.close()
-        conn.close()
-
-
-
-
-
-
-
-
-
-
-
-
+# class GenerateRequest(BaseModel):
+#     constraints: List[str] = []
+#     batch_id: str = "all"
 
 class GenerateRequest(BaseModel):
     constraints: List[str] = []
+    batch_id: str = "all"
+    start_hour: int = 8
+    end_hour: int = 16
+    break_hour: int = 12
+
+
+
+class TimetableRecord(BaseModel):
+    department_id: int
+    day_of_week: str
+    timeslot: str
+    room_id: int
+    batch_id: int
+    subject_id: int
+    faculty_id: int
+    # faculty: Optional[str] = None
+    # subject: Optional[str] = None
+    # room: Optional[str] = None
+    # batch: Optional[str] = None
+
+class SaveTimetableRequest(BaseModel):
+    records: List[TimetableRecord]
+    notes: str = ""
+
+# =========================================================
+# DEPARTMENT API
+# =========================================================
+
+@app.post("/add-department/")
+def add_department(dept: DeptCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            "INSERT INTO departments (name) VALUES (%s)",
+            (dept.name,)
+        )
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Department added successfully"
+        }
+
+    except errors.UniqueViolation:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Department already exists"
+        )
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+@app.get("/get-departments/")
+def get_departments():
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT *
+            FROM departments
+            ORDER BY id ASC
+        """)
+
+        return {
+            "data": cursor.fetchall()
+        }
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+@app.delete("/delete-department/{dept_id}")
+def delete_department(dept_id: int):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            DELETE FROM departments
+            WHERE id = %s
+            RETURNING id
+        """, (dept_id,))
+
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Department not found"
+            )
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Department deleted"
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+# =========================================================
+# FACULTY API
+# =========================================================
+
+@app.post("/add-faculty/")
+def add_faculty(faculty: FacultyCreate):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            INSERT INTO faculties (
+                department_id,
+                name,
+                max_weekly_hours
+            )
+            VALUES (%s, %s, %s)
+        """, (
+            faculty.department_id,
+            faculty.name,
+            faculty.max_weekly_hours
+        ))
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Faculty added successfully"
+        }
+
+    except errors.CheckViolation:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Weekly hours must be between 1 and 40"
+        )
+
+    except errors.UniqueViolation:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Faculty already exists"
+        )
+
+    except errors.ForeignKeyViolation:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid department"
+        )
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+@app.get("/get-faculties/")
+def get_faculties():
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            SELECT
+                f.id,
+                f.name,
+                f.max_weekly_hours,
+                f.department_id,
+                d.name AS department_name
+            FROM faculties f
+            JOIN departments d
+            ON f.department_id = d.id
+            ORDER BY f.id ASC
+        """)
+
+        faculties = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT
+                fe.faculty_id,
+                s.name AS subject_name,
+                fe.competency_tier
+            FROM faculty_expertise fe
+            JOIN subjects s
+            ON fe.subject_id = s.id
+        """)
+
+        expertise = cursor.fetchall()
+
+        exp_map = {}
+
+        for exp in expertise:
+
+            fid = exp["faculty_id"]
+
+            if fid not in exp_map:
+                exp_map[fid] = {
+                    "primary": [],
+                    "secondary": []
+                }
+
+            if float(exp["competency_tier"]) == 1.0:
+                exp_map[fid]["primary"].append(exp["subject_name"])
+            else:
+                exp_map[fid]["secondary"].append(exp["subject_name"])
+
+        for faculty in faculties:
+
+            fid = faculty["id"]
+
+            faculty["primary_subjects"] = exp_map.get(
+                fid,
+                {}
+            ).get("primary", [])
+
+            faculty["secondary_subjects"] = exp_map.get(
+                fid,
+                {}
+            ).get("secondary", [])
+
+        return {
+            "data": faculties
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+@app.delete("/delete-faculty/{faculty_id}")
+def delete_faculty(faculty_id: int):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            DELETE FROM faculties
+            WHERE id = %s
+            RETURNING id
+        """, (faculty_id,))
+
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Faculty not found"
+            )
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Faculty deleted"
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+# =========================================================
+# ROOM API
+# =========================================================
+
+@app.post("/add-room/")
+def add_room(room: RoomCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        has_projector = "Projector" in room.amenities
+        has_ac = "AC" in room.amenities
+        has_whiteboard = "Whiteboard" in room.amenities
+        has_computers = "Computers" in room.amenities
+
+        cursor.execute("""
+            INSERT INTO rooms (
+                name, capacity, room_type, has_projector, has_ac, 
+                has_whiteboard, has_computers, extra_features, is_active
+            )
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            room.name, room.capacity, room.room_type, has_projector, has_ac,
+            has_whiteboard, has_computers, room.extra_features, room.is_active
+        ))
+        conn.commit()
+        return {"success": True, "message": "Room added successfully"}
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+#
+@app.get("/get-rooms/")
+def get_rooms():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Fetch ALL rooms, no WHERE clause needed anymore
+        cursor.execute("SELECT * FROM rooms ORDER BY name ASC")
+        return {"data": cursor.fetchall()}
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+# =========================================================
+# BATCH API
+# =========================================================
+
+@app.post("/add-batch/")
+def add_batch(batch: BatchCreate):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        # CHANGE:
+        # Added shift insertion.
+        cursor.execute("""
+            INSERT INTO batches (
+                name,
+                student_count,
+                mentor_id,
+                department_id,
+                shift
+            )
+            VALUES (%s,%s,%s,%s,%s)
+        """, (
+            batch.name,
+            batch.student_count,
+            batch.mentor_id,
+            batch.department_id,
+            batch.shift
+        ))
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Batch added successfully"
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+# CHANGE:
+# Removed duplicate /get-batches route.
+@app.get("/get-batches/{department_id}")
+def get_batches(department_id: int):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            SELECT
+                b.id,
+                b.name,
+                b.student_count,
+                b.shift,
+                b.department_id,
+                b.mentor_id,
+                f.name AS mentor_name
+            FROM batches b
+            LEFT JOIN faculties f
+            ON b.mentor_id = f.id
+            WHERE b.department_id = %s
+            ORDER BY b.name ASC
+        """, (department_id,))
+
+        return {
+            "data": cursor.fetchall()
+        }
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+# =========================================================
+# SUBJECT API
+# =========================================================
+
+@app.post("/add-subject/")
+def add_subject(subject: SubjectCreate):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            INSERT INTO subjects (
+                name,
+                subject_type,
+                required_sessions,
+                department_id
+            )
+            VALUES (%s,%s,%s,%s)
+        """, (
+            subject.name,
+            subject.subject_type,
+            subject.required_sessions,
+            subject.department_id
+        ))
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Subject added successfully"
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+@app.get("/get-subjects/{department_id}")
+def get_subjects(department_id: int):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            SELECT
+                s.id,
+                s.name,
+                s.subject_type,
+                s.required_sessions,
+                d.name AS department_name
+            FROM subjects s
+            JOIN departments d
+            ON s.department_id = d.id
+            WHERE s.department_id = %s
+            ORDER BY s.name ASC
+        """, (department_id,))
+
+        return {
+            "data": cursor.fetchall()
+        }
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+# =========================================================
+# EXPERTISE API
+# =========================================================
+
+@app.post("/add-expertise/")
+def add_expertise(exp: ExpertiseCreate):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            INSERT INTO faculty_expertise (
+                faculty_id,
+                subject_id,
+                competency_tier
+            )
+            VALUES (%s,%s,%s)
+            ON CONFLICT (faculty_id, subject_id)
+            DO UPDATE SET
+            competency_tier = EXCLUDED.competency_tier
+        """, (
+            exp.faculty_id,
+            exp.subject_id,
+            exp.competency_tier
+        ))
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Expertise added successfully"
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+@app.get("/get-expertise/{faculty_id}")
+def get_expertise(faculty_id: int):
+    """Fetches a specific faculty member's mapped subjects and competency tiers."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # We use 'AS id' to match what your frontend JavaScript is expecting
+        cursor.execute("""
+            SELECT 
+                subject_id AS id, 
+                competency_tier
+            FROM faculty_expertise
+            WHERE faculty_id = %s
+        """, (faculty_id,))
+        
+        return {
+            "data": cursor.fetchall()
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+# =========================================================
+# TIMETABLE GENERATION (MASTER ENGINE)
+# =========================================================
 
 @app.post("/generate-timetable/{department_id}")
 def generate_timetable(department_id: int, payload: GenerateRequest):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    
+    cursor = conn.cursor()  
     try:
-        # 1. Fetch All Relational Entities
+        # =====================================================
+        # 1. FETCH DATA
+        # =====================================================
         cursor.execute("SELECT * FROM faculties WHERE department_id = %s", (department_id,))
         faculties = cursor.fetchall()
-        
+
         cursor.execute("SELECT * FROM subjects WHERE department_id = %s", (department_id,))
         subjects = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM rooms WHERE department_id = %s AND is_active = TRUE", (department_id,))
+
+        cursor.execute("SELECT * FROM rooms WHERE is_active = TRUE")
         rooms = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM batches WHERE department_id = %s", (department_id,))
-        batches = cursor.fetchall()
-        
+
+        if payload.batch_id != "all":
+            cursor.execute("SELECT * FROM batches WHERE department_id = %s AND id = %s", (department_id, int(payload.batch_id)))
+            batches = cursor.fetchall()
+            
+            # NEW: Fetch existing bookings for OTHER batches to prevent double-booking!
+            cursor.execute("""
+                SELECT faculty_id, room_id, day_of_week, timeslot
+                FROM timetables
+                WHERE batch_id != %s
+            """, (int(payload.batch_id),))
+            existing_bookings = cursor.fetchall()
+        else:
+            cursor.execute("SELECT * FROM batches WHERE department_id = %s", (department_id,))
+            batches = cursor.fetchall()
+            existing_bookings = []
+
         cursor.execute("""
-            SELECT fe.faculty_id, fe.subject_id, fe.competency_tier 
-            FROM faculty_expertise fe
-            JOIN faculties f ON fe.faculty_id = f.id
-            WHERE f.department_id = %s
-        """, (department_id,))
-        expertise = cursor.fetchall() 
-        
-        if not faculties or not subjects or not batches or not rooms:
-            return {"success": False, "message": "Missing necessary data to run the engine."}
+                        SELECT fe.faculty_id, fe.subject_id, fe.competency_tier
+                        FROM faculty_expertise fe
+                        JOIN faculties f ON fe.faculty_id = f.id
+                        WHERE f.department_id = %s
+                    """, (department_id,))
+        expertise = cursor.fetchall()
 
-        exp_map = {(exp['faculty_id'], exp['subject_id']): float(exp['competency_tier']) for exp in expertise}
+        if not faculties or not subjects or not rooms or not batches:
+         return {"success": False, "message": "Missing required data"}
 
+                    # =====================================================
+                    # 2. EXPERTISE & ROOM MAPS
+                    # =====================================================
+        exp_map = {(exp["faculty_id"], exp["subject_id"]): float(exp["competency_tier"]) for exp in expertise}
+
+        eligible_rooms = {}
+        for subject in subjects:
+            valid_rooms = []
+            for room in rooms:
+                if subject["subject_type"] == "Practical" and room["room_type"] == "Laboratory":
+                    valid_rooms.append(room)
+                elif subject["subject_type"] != "Practical" and room["room_type"] != "Laboratory":
+                    valid_rooms.append(room)
+            eligible_rooms[subject["id"]] = valid_rooms
+
+                    # =====================================================
+                    # 3. DYNAMIC SLOTS CONFIGURATION
+                    # =====================================================
+        dynamic_slots = []
+        for h in range(payload.start_hour, payload.end_hour):
+            if h == payload.break_hour:
+                continue # Skip the break period
+            
+            am_pm1 = "AM" if h < 12 or h == 24 else "PM"
+            disp1 = h if h <= 12 else h - 12
+            if disp1 == 0: disp1 = 12
+            
+            h2 = h + 1
+            am_pm2 = "AM" if h2 < 12 or h2 == 24 else "PM"
+            disp2 = h2 if h2 <= 12 else h2 - 12
+            if disp2 == 0: disp2 = 12
+            
+            dynamic_slots.append(f"{disp1:02d}:00 {am_pm1} - {disp2:02d}:00 {am_pm2}")
+
+                    # =====================================================
+                    # 4. MODEL & VARIABLES
+                    # =====================================================
         model = cp_model.CpModel()
-        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-        
-        SHIFT_SLOTS = {
-            "Morning": [
-                "08:00 AM - 09:00 AM",
-                "09:00 AM - 10:00 AM",
-                "10:00 AM - 11:00 AM",
-                "12:00 PM - 01:00 PM",
-                "01:00 PM - 02:00 PM"
-            ],
-            "Afternoon": [
-                "12:00 PM - 01:00 PM",
-                "01:00 PM - 02:00 PM",
-                "02:00 PM - 03:00 PM",
-                "04:00 PM - 05:00 PM",
-                "05:00 PM - 06:00 PM"
-            ]
-        }
-        
-        # Create a unique list of all possible timeslots across all shifts
-        all_slots = list(dict.fromkeys(SHIFT_SLOTS["Morning"] + SHIFT_SLOTS["Afternoon"]))
-        
-        # 2. Define Variables
         x = {}
-        for f in faculties:
-            f_id = f['id']
-            for s in subjects:
-                s_id = s['id']
-                
-                # Check faculty expertise
-                if (f_id, s_id) not in exp_map: 
-                    continue 
-                    
-                for r in rooms:
-                    r_id = r['id']
-                    
-                    # Check room type matching
-                    if s['subject_type'] == 'Practical' and r['room_type'] != 'Laboratory':
-                        continue
-                    if s['subject_type'] in ['Theory', 'Seminar'] and r['room_type'] == 'Laboratory':
-                        continue
 
-                    for d in days:
-                        for b in batches:
-                            b_id = b['id']
-                            batch_shift = b.get('shift', 'Morning')
-                            
-                            for t in SHIFT_SLOTS[batch_shift]:
-                                x[(f_id, s_id, r_id, d, t, b_id)] = model.NewBoolVar(f'x_{f_id}_{s_id}_{r_id}_{d}_{t}_{b_id}')
-                                
-        # 3. Base Hard Constraints (Always applied)
-        for f in faculties:
-            for d in days:
-                for t in all_slots:
-                    faculty_vars = [x[k] for k in x if k[0] == f['id'] and k[3] == d and k[4] == t]
-                    if faculty_vars:
-                        model.AddAtMostOne(faculty_vars)
+        for faculty in faculties:
+            for subject in subjects:
+                if (faculty["id"], subject["id"]) not in exp_map:
+                    continue
+                for room in eligible_rooms[subject["id"]]:
+                    for batch in batches:
+                        for day in DAYS:
+                            for slot in dynamic_slots:
+                                key = (faculty["id"], subject["id"], room["id"], day, slot, batch["id"])
+                                x[key] = model.NewBoolVar(f"x_{faculty['id']}_{subject['id']}_{room['id']}_{day}_{slot}_{batch['id']}")
 
-        for r in rooms:
-            for d in days:
-                for t in all_slots:
-                    room_vars = [x[k] for k in x if k[2] == r['id'] and k[3] == d and k[4] == t]
-                    if room_vars:
-                        model.AddAtMostOne(room_vars)
+                    # =====================================================
+                    # 5. HARD CONSTRAINTS
+                    # =====================================================
+        for faculty in faculties:
+            for day in DAYS:
+                for slot in dynamic_slots:
+                    vars_list = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day and k[4] == slot]
+                    if vars_list: model.AddAtMostOne(vars_list)
 
-        for b in batches:
-            for d in days:
-                for t in all_slots:
-                    batch_vars = [x[k] for k in x if k[5] == b['id'] and k[3] == d and k[4] == t]
-                    if batch_vars:
-                        model.AddAtMostOne(batch_vars)
+        for room in rooms:
+            for day in DAYS:
+                for slot in dynamic_slots:
+                    vars_list = [x[k] for k in x if k[2] == room["id"] and k[3] == day and k[4] == slot]
+                    if vars_list: model.AddAtMostOne(vars_list)
 
-        for b in batches:
-            for s in subjects:
-                subject_vars = [x[k] for k in x if k[1] == s['id'] and k[5] == b['id']]
-                if subject_vars:
-                    model.Add(sum(subject_vars) == s['required_sessions'])
-                elif s['required_sessions'] > 0:
-                    model.Add(0 == 1)
+        for batch in batches:
+            for day in DAYS:
+                for slot in dynamic_slots:
+                    vars_list = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot]
+                    if vars_list: model.AddAtMostOne(vars_list)
 
-        for f in faculties:
-            faculty_total_vars = [x[k] for k in x if k[0] == f['id']]
-            if faculty_total_vars:
-                model.Add(sum(faculty_total_vars) <= f['max_weekly_hours'])
+        for batch in batches:
+            for subject in subjects:
+                vars_list = [x[k] for k in x if k[1] == subject["id"] and k[5] == batch["id"]]
+                if vars_list: model.Add(sum(vars_list) == subject["required_sessions"])
 
-        # ==================================================
-        # 4. OPTIONAL DYNAMIC CONSTRAINTS (From UI)
-        # ==================================================
-        
-        # Rule 1: No Consecutive Same Subject for a Batch
+        for faculty in faculties:
+            vars_list = [x[k] for k in x if k[0] == faculty["id"]]
+            if vars_list: model.Add(sum(vars_list) <= faculty["max_weekly_hours"])
+            
+        # --- NEW: LOCK EXISTING SCHEDULES (Incremental Generation) ---
+        for booking in existing_bookings:
+            fac_id = booking["faculty_id"]
+            rm_id = booking["room_id"]
+            d = booking["day_of_week"]
+            t = booking["timeslot"]
+
+            # Prevent generating a class with a busy faculty
+            fac_vars = [x[k] for k in x if k[0] == fac_id and k[3] == d and k[4] == t]
+            if fac_vars:
+                model.Add(sum(fac_vars) == 0)
+
+            # Prevent generating a class in a busy room
+            rm_vars = [x[k] for k in x if k[2] == rm_id and k[3] == d and k[4] == t]
+            if rm_vars:
+                model.Add(sum(rm_vars) == 0)
+
+        # =====================================================
+        # 6. DYNAMIC UI CONSTRAINTS
+        # =====================================================
         if "no_consecutive" in payload.constraints:
-            for b in batches:
-                batch_shift = b.get('shift', 'Morning')
-                shift_times = SHIFT_SLOTS[batch_shift]
-                
-                for s in subjects:
-                    for d in days:
-                        for i in range(len(shift_times) - 1):
-                            t1, t2 = shift_times[i], shift_times[i+1]
-                            var_t1 = [x[k] for k in x if k[5] == b['id'] and k[1] == s['id'] and k[3] == d and k[4] == t1]
-                            var_t2 = [x[k] for k in x if k[5] == b['id'] and k[1] == s['id'] and k[3] == d and k[4] == t2]
-                            
-                            if var_t1 and var_t2:
-                                model.Add(sum(var_t1) + sum(var_t2) <= 1)
+            for batch in batches:
+                for day in DAYS:
+                    for subject in subjects:
+                        for i in range(len(dynamic_slots) - 1):
+                            slot1 = dynamic_slots[i]
+                            slot2 = dynamic_slots[i+1]
+                            vars_slot1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot1 and k[1] == subject["id"]]
+                            vars_slot2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot2 and k[1] == subject["id"]]
+                            if vars_slot1 and vars_slot2:
+                                model.Add(sum(vars_slot1) + sum(vars_slot2) <= 1)
 
-        # Rule 2: Strict Faculty Load (Max 2 classes per day per faculty)
         if "strict_faculty_load" in payload.constraints:
-            for f in faculties:
-                for d in days:
-                    daily_faculty_vars = [x[k] for k in x if k[0] == f['id'] and k[3] == d]
-                    if daily_faculty_vars:
-                        model.Add(sum(daily_faculty_vars) <= 2)
+            for faculty in faculties:
+                for day in DAYS:
+                    vars_day = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day]
+                    if vars_day: model.Add(sum(vars_day) <= 2)
 
-        # Rule 3: Faculty gets at least one day off per week
         if "faculty_day_off" in payload.constraints:
-            for f in faculties:
-                day_active_vars = []
-                for d in days:
-                    active = model.NewBoolVar(f'active_{f["id"]}_{d}')
-                    day_vars = [x[k] for k in x if k[0] == f['id'] and k[3] == d]
-                    if day_vars:
-                        model.AddMaxEquality(active, day_vars)
-                    else:
-                        model.Add(active == 0)
-                    day_active_vars.append(active)
-                model.Add(sum(day_active_vars) <= 4)
+            for faculty in faculties:
+                worked_days = []
+                for day in DAYS:
+                    vars_day = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day]
+                    if vars_day:
+                        worked_day_var = model.NewBoolVar(f"worked_{faculty['id']}_{day}")
+                        model.AddMaxEquality(worked_day_var, vars_day)
+                        worked_days.append(worked_day_var)
+                if worked_days:
+                    model.Add(sum(worked_days) <= len(DAYS) - 1)
 
-        # ==================================================
-        
-        # 5. Objective: Maximize Expertise Match (+ optional Morning Heavy rule)
+        # =====================================================
+        # 7. OBJECTIVE & SOFT CONSTRAINTS
+        # =====================================================
         objective_terms = []
-        for k, var in x.items():
-            f_id, s_id, t = k[0], k[1], k[4]
-            weight = int(exp_map[(f_id, s_id)] * 10)
-            
-            # Rule 4: Morning Heavy (Penalize afternoon slots to pack mornings)
+        for key, var in x.items():
+            faculty_id = key[0]
+            subject_id = key[1]
+            slot = key[4]
+            score = int(exp_map[(faculty_id, subject_id)] * 10)
+
             if "morning_heavy" in payload.constraints:
-                if "PM" in t and "12:00" not in t:
-                    weight -= 2 
-                    
-            objective_terms.append(var * weight)
-            
+                if "AM" in slot: score += 3
+                elif "12:00 PM" in slot: score += 1
+
+            objective_terms.append(var * score)
+
         model.Maximize(sum(objective_terms))
 
-        # 6. Run Solver
+        # =====================================================
+        # 8. SOLVE & SCORE (UPDATED FOR DRAFT MODE)
+        # =====================================================
         solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = 8.0 
+        solver.parameters.max_time_in_seconds = 20
         status = solver.Solve(model)
 
         if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            cursor.execute("DELETE FROM timetables WHERE department_id = %s;", (department_id,))
-            
-            records_to_insert = []
-            for k, var in x.items():
-                if solver.Value(var) == 1:
-                    f_id, s_id, r_id, d, t, b_id = k
-                    records_to_insert.append((department_id, d, t, r_id, b_id, s_id, f_id))
-            
-            if records_to_insert:
-                cursor.executemany("""
-                    INSERT INTO timetables (department_id, day_of_week, timeslot, room_id, batch_id, subject_id, faculty_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, records_to_insert)
-            
-            conn.commit()
-            return {"success": True, "message": "Optimal Flow Reached", "total_lectures_scheduled": len(records_to_insert)}
-        else:
-            return {"success": False, "message": "Engine failed. The combined constraints are too tight."}
+            achieved_score = solver.ObjectiveValue()
+            theoretical_max = sum(s["required_sessions"] for s in subjects) * len(batches) * 13
+            quality_percentage = round((achieved_score / theoretical_max) * 100, 1) if theoretical_max > 0 else 100
 
+            # Create lookup dictionaries so the frontend gets readable names for the draft
+            sub_dict = {s['id']: s['name'] for s in subjects}
+            room_dict = {r['id']: r['name'] for r in rooms}
+            fac_dict = {f['id']: f['name'] for f in faculties}
+            batch_dict = {b['id']: b['name'] for b in batches}
+
+            draft_records = []
+            for key, var in x.items():
+                if solver.Value(var) == 1:
+                    draft_records.append({
+                        "department_id": department_id,
+                        "faculty_id": key[0],
+                        "subject_id": key[1],
+                        "room_id": key[2],
+                        "day_of_week": key[3],
+                        "timeslot": key[4],
+                        "batch_id": key[5],
+                        # Human-readable fields for the UI rendering
+                        "faculty": fac_dict[key[0]],
+                        "subject": sub_dict[key[1]],
+                        "room": room_dict[key[2]],
+                        "batch": batch_dict[key[5]]
+                    })
+
+            return {
+                "success": True, 
+                "message": f"Engine Success! Schedule Quality: {quality_percentage}%",
+                "quality_score": quality_percentage,
+                "is_optimal": status == cp_model.OPTIMAL,
+                "total_lectures_scheduled": len(draft_records),
+                "draft_schedule": draft_records # <-- Send DRAFT to frontend!
+            }
+        else:
+            return {"success": False, "message": "No feasible timetable found under these constraints"}
+
+         
+        
     except Exception as e:
-        conn.rollback()
-        import traceback
-        traceback.print_exc() # This will print the exact line of failure to your terminal if it crashes again
+        print("--- SCHEDULER ENGINE CRASHED ---")
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
+    
+    # 3. Add the finally block at the VERY END to release the connection
     finally:
         cursor.close()
-        conn.close()
-        
-        
-@app.get("/view-timetable/")
-def view_timetable(department_id: Optional[int] = None):
+        release_db_connection(conn)
+
+# CHANGE:safe timetable saving with transaction and batch deletion/insertion    
+    
+@app.post("/save-timetable/")
+def save_timetable(payload: SaveTimetableRequest):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Join tables to get actual names instead of just IDs
+        if not payload.records:
+            return {"success": False, "message": "No records to save."}
+            
+        # Get the targeted batch and department from the first record
+        batch_id = payload.records[0].batch_id
+        dept_id = payload.records[0].department_id
+
+        # 1. Safely delete the old timetable for this specific batch
+        cursor.execute("DELETE FROM timetables WHERE batch_id = %s", (batch_id,))
+
+        # 2. Insert the new ones with the user's note
+        insert_data = [
+            (r.department_id, r.day_of_week, r.timeslot, r.room_id, r.batch_id, r.subject_id, r.faculty_id, payload.notes)
+            for r in payload.records
+        ]
+        
+        cursor.executemany("""
+            INSERT INTO timetables (department_id, day_of_week, timeslot, room_id, batch_id, subject_id, faculty_id, notes)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """, insert_data)
+
+        conn.commit()
+        return {"success": True, "message": "Timetable securely published to database."}
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)   
+
+
+# =========================================================
+# VIEW TIMETABLE
+# =========================================================
+
+@app.get("/view-timetable/")
+def view_timetable(
+    department_id: Optional[int] = None,
+    batch_id: Optional[int] = None
+):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        # Update the query string inside view_timetable:
         query = """
-            SELECT 
+            SELECT
                 t.day_of_week,
                 t.timeslot,
+                t.notes,  -- <-- ADD THIS LINE
                 b.name AS batch,
+                b.shift AS batch_shift,
                 s.name AS subject,
                 r.name AS room,
                 f.name AS faculty
@@ -853,47 +1038,48 @@ def view_timetable(department_id: Optional[int] = None):
             JOIN subjects s ON t.subject_id = s.id
             JOIN rooms r ON t.room_id = r.id
             JOIN faculties f ON t.faculty_id = f.id
+            WHERE 1=1
         """
-        
-        # Optional filter if you want to support department-specific fetching later
+        params = []
+
         if department_id:
-            query += f" WHERE t.department_id = {department_id}"
-            
-        cursor.execute(query)
-        records = cursor.fetchall()
-        
-        return {"data": records}
+
+            query += " AND t.department_id = %s"
+            params.append(department_id)
+
+        if batch_id:
+
+            query += " AND t.batch_id = %s"
+            params.append(batch_id)
+
+        cursor.execute(query, tuple(params))
+
+        return {
+            "data": cursor.fetchall()
+        }
+
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)    
+        
+        
+@app.delete("/delete-timetable/{batch_id}")
+def delete_timetable(batch_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM timetables WHERE batch_id = %s", (batch_id,))
+        if cursor.rowcount == 0:
+            return {"success": False, "message": "No timetable found to delete."}
+            
+        conn.commit()
+        return {"success": True, "message": "Timetable securely deleted."}
+    except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cursor.close()
-        conn.close() 
-
-
-
-@app.get("/get-batches/{department_id}")
-def get_batches_by_department(department_id: int):
-    conn = get_db_connection()
-    # Assuming your database connection uses a dictionary cursor based on your generate function
-    cursor = conn.cursor() 
-    
-    try:
-        # We explicitly filter the batches WHERE department_id matches the route parameter
-        cursor.execute("""
-            SELECT id, name 
-            FROM batches 
-            WHERE department_id = %s
-        """, (department_id,))
-        
-        batches = cursor.fetchall()
-        
-        # Returns the exact format your frontend JavaScript is expecting: result.data
-        return {"data": batches}
-        
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Failed to fetch batches.")
-    finally:
-        cursor.close()
-        conn.close()
+        release_db_connection(conn)
