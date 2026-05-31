@@ -201,23 +201,28 @@
         <div class="flex items-center gap-3">
           <span class="material-symbols-outlined text-primary">warning</span>
           <p class="font-label-md text-primary font-bold">
-            Draft Mode: This timetable is pending your review and is not saved
-            to the database yet.
+            Draft Mode: Select an optimization option below.
           </p>
         </div>
+
+        <div
+          id="draftOptionsContainer"
+          class="flex gap-2 bg-white p-1 rounded-lg border-2 border-primary"
+        ></div>
+
         <div class="flex gap-3 w-full md:w-auto">
           <button
             id="discardDraftBtn"
             class="w-full md:w-auto px-4 py-2 font-label-md text-primary hover:bg-surface-container rounded-md border-2 border-primary bg-white shadow-sm active:translate-y-0.5"
           >
-            Discard Draft
+            Discard
           </button>
           <button
             id="openSaveModalBtn"
             class="w-full md:w-auto bg-primary text-on-primary px-6 py-2 rounded-md font-label-md offset-shadow-sm active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
           >
             <span class="material-symbols-outlined text-[18px]">publish</span>
-            Publish Timetable
+            Publish
           </button>
         </div>
       </div>
@@ -419,60 +424,65 @@
       };
 
       // --- INIT DRAFT MODE ---
+      // --- INIT DRAFT MODE ---
       function initDraftMode() {
         document.getElementById("draftBanner").classList.remove("hidden");
-        // Notice: We do NOT hide the batchSelectionUI anymore!
 
-        const draftData = JSON.parse(sessionStorage.getItem("draftSchedule"));
+        // Load the array of 3 options
+        const draftOptions = JSON.parse(sessionStorage.getItem("draftOptions"));
 
-        if (!draftData || draftData.length === 0) {
+        if (!draftOptions || draftOptions.length === 0) {
           alert("Draft data expired or missing.");
           window.location.href = "timetable.html";
           return;
         }
-        allSchedules = draftData;
 
-        // 1. Populate the Batch Dropdown using only the generated draft batches
-        const uniqueBatches = [...new Set(draftData.map((d) => d.batch))];
-        const batchSelect = document.getElementById("batchSelectFilter");
-        batchSelect.innerHTML = ""; // Clear "Loading..."
+        // Setup the 3 UI Buttons
+        const optionsContainer = document.getElementById(
+          "draftOptionsContainer",
+        );
+        optionsContainer.innerHTML = "";
+        let currentlySelectedDraftIndex = 0; // Default to Option 1
 
-        uniqueBatches.forEach((batchName) => {
-          batchSelect.innerHTML += `<option value="${batchName}">${batchName}</option>`;
+        draftOptions.forEach((opt, index) => {
+          const btn = document.createElement("button");
+          btn.className = `px-4 py-1.5 font-label-sm font-bold rounded-md transition-colors ${index === 0 ? "bg-primary text-on-primary" : "text-primary hover:bg-surface-container"}`;
+          btn.innerText = opt.option_name;
+          btn.onclick = () => {
+            // Update UI selection
+            Array.from(optionsContainer.children).forEach((b) => {
+              b.classList.remove("bg-primary", "text-on-primary");
+              b.classList.add("text-primary", "hover:bg-surface-container");
+            });
+            btn.classList.remove("text-primary", "hover:bg-surface-container");
+            btn.classList.add("bg-primary", "text-on-primary");
+
+            // Render the selected grid
+            currentlySelectedDraftIndex = index;
+            allSchedules = draftOptions[index].records;
+            renderGrid(draftOptions[index].records[0].batch);
+          };
+          optionsContainer.appendChild(btn);
         });
 
-        // 2. Automatically render the first batch
-        if (uniqueBatches.length > 0) {
-          batchSelect.value = uniqueBatches[0];
-          renderGrid(uniqueBatches[0]);
-        }
+        // Initial Render (Option 1)
+        allSchedules = draftOptions[0].records;
+        renderGrid(draftOptions[0].records[0].batch);
 
-        // 3. AUTO-OPEN THE SAVE MODAL IMMEDIATELY
+        // Save Modal Logic
         const saveModal = document.getElementById("saveTimetableModal");
         const saveContent = document.getElementById(
           "saveTimetableModalContent",
         );
-        saveModal.classList.remove("hidden");
-        setTimeout(() => {
-          saveModal.classList.remove("opacity-0");
-          saveContent.classList.remove("scale-95");
-        }, 50); // Slight delay for animation
 
-        // Discard Button
         document
           .getElementById("discardDraftBtn")
           .addEventListener("click", () => {
-            if (
-              !confirm(
-                "Are you sure you want to discard this generated schedule?",
-              )
-            )
-              return;
-            sessionStorage.removeItem("draftSchedule");
-            window.location.href = "timetable.html"; // Reload to normal mode
+            if (!confirm("Discard all draft options?")) return;
+            sessionStorage.removeItem("draftOptions");
+            window.location.href = "timetable.html";
           });
 
-        // Manual Open Button (if they canceled the auto-popup)
         document
           .getElementById("openSaveModalBtn")
           .addEventListener("click", () => {
@@ -483,7 +493,6 @@
             }, 10);
           });
 
-        // Close Modal Button
         document
           .getElementById("closeSaveModalBtn")
           .addEventListener("click", () => {
@@ -492,7 +501,6 @@
             setTimeout(() => saveModal.classList.add("hidden"), 300);
           });
 
-        // Confirm Save Logic
         document
           .getElementById("confirmSaveBtn")
           .addEventListener("click", async function () {
@@ -501,16 +509,23 @@
             this.disabled = true;
 
             try {
+              // Send ONLY the selected option to the database!
+              const selectedRecords =
+                draftOptions[currentlySelectedDraftIndex].records;
+
               const response = await fetch(`${API_URL}/save-timetable/`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ records: draftData, notes: notes }),
+                body: JSON.stringify({
+                  records: selectedRecords,
+                  notes: notes,
+                }),
               });
               const result = await response.json();
               if (result.success) {
                 alert("Timetable Published Successfully!");
-                sessionStorage.removeItem("draftSchedule");
-                window.location.href = "timetable.html"; // Reload to normal view
+                sessionStorage.removeItem("draftOptions");
+                window.location.href = "timetable.html";
               } else {
                 alert("Error: " + result.message);
               }

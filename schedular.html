@@ -714,14 +714,11 @@
               const data = await response.json();
 
               if (data.success) {
-                alert(
-                  `Engine Success! ${data.total_lectures_scheduled} lectures optimally scheduled. Redirecting to Draft Review...`,
-                );
-
-                // SAVE TO BROWSER MEMORY
+                alert(`Engine Success! Redirecting to Draft Review...`);
+                // Save ALL 3 OPTIONS to browser memory
                 sessionStorage.setItem(
-                  "draftSchedule",
-                  JSON.stringify(data.draft_schedule),
+                  "draftOptions",
+                  JSON.stringify(data.draft_options),
                 );
                 sessionStorage.setItem("draftBatchId", batchId);
                 sessionStorage.setItem("draftDeptId", departmentId);
