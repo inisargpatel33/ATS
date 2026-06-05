@@ -1602,112 +1602,151 @@ def delete_timetable(batch_id: int):
     finally:
         cursor.close()
         release_db_connection(conn)
-        # =========================================================
-# GLOBAL ANALYTICS DASHBOARD API (WHOLE UNIVERSITY)
+        
+        
+        
+ # =========================================================
+# GLOBAL ANALYTICS DASHBOARD API (NEXT-LEVEL SAAS)
 # =========================================================
 @app.get("/dashboard-stats/global")
 def get_global_dashboard_stats():
     conn = get_db_connection()
     cursor = conn.cursor()
+    import math
     try:
-        # 1. Total Faculty (Campus-wide)
+        # 1. Executive Stats
         cursor.execute("SELECT COUNT(*) as count FROM faculties")
         fac_count = cursor.fetchone()["count"]
 
-        # 2. Active Batches (Campus-wide)
         cursor.execute("SELECT COUNT(*) as count FROM batches")
         batch_count = cursor.fetchone()["count"]
 
-        # 3. Room Utilization (Campus-wide)
+        cursor.execute("SELECT COALESCE(SUM(student_count), 0) as count FROM batches")
+        student_count = cursor.fetchone()["count"]
+
+        cursor.execute("SELECT COUNT(*) as count FROM departments")
+        dept_count = cursor.fetchone()["count"]
+
+        cursor.execute("SELECT COUNT(*) as count FROM subjects")
+        subject_count = cursor.fetchone()["count"]
+
         cursor.execute("SELECT COUNT(*) as count FROM rooms WHERE is_active = TRUE")
         room_count = cursor.fetchone()["count"]
-        total_possible_slots = room_count * 35 
         
+        total_possible_slots = room_count * 35 
         cursor.execute("SELECT COUNT(*) as count FROM timetables")
         booked_slots = cursor.fetchone()["count"]
         utilization = round((booked_slots / total_possible_slots) * 100) if total_possible_slots > 0 else 0
 
-        # 4. Faculty Workload Distribution (Top 20 Busiest across University)
+        # 2. Faculty Workload & Overload Calculation
         cursor.execute("""
             SELECT f.name, COUNT(t.id) as assigned_hours, f.max_weekly_hours 
             FROM faculties f
             LEFT JOIN timetables t ON f.id = t.faculty_id
             GROUP BY f.id, f.name, f.max_weekly_hours
             ORDER BY assigned_hours DESC
-            LIMIT 20
         """)
         faculty_load = cursor.fetchall()
+        
+        overworked_count = sum(1 for f in faculty_load if f["max_weekly_hours"] > 0 and (f["assigned_hours"] / f["max_weekly_hours"]) >= 0.9)
+        underused_rooms_count = math.ceil(room_count * (1 - (utilization / 100))) if utilization < 60 else 0
+
+        # 3. System Issues (Unscheduled & Unmapped)
+        cursor.execute("SELECT COUNT(*) as c FROM (SELECT b.id FROM batches b LEFT JOIN timetables t ON b.id = t.batch_id GROUP BY b.id HAVING COUNT(t.id) = 0) as sub")
+        unscheduled_batches = cursor.fetchone()["c"]
+
+        cursor.execute("SELECT COUNT(*) as c FROM (SELECT s.id FROM subjects s LEFT JOIN faculty_expertise fe ON s.id = fe.subject_id GROUP BY s.id HAVING COUNT(fe.faculty_id) = 0) as sub")
+        unmapped_subjects = cursor.fetchone()["c"]
+
+        total_issues = unscheduled_batches + unmapped_subjects + overworked_count
 
         # =========================================================
-        # 5. AI RECOMMENDATION ENGINE (GLOBAL SCALED)
+        # 4. TIMETABLE HEALTH SCORE ENGINE
+        # =========================================================
+        health_score = 100
+        health_checklist = []
+
+        # Check Faculty
+        if overworked_count == 0:
+            health_checklist.append({"status": "pass", "text": "No overloaded faculty"})
+        else:
+            health_score -= (overworked_count * 3)
+            health_checklist.append({"status": "warn", "text": f"{overworked_count} faculty overloaded"})
+
+        # Check Rooms
+        if utilization <= 85:
+            health_checklist.append({"status": "pass", "text": "Healthy room utilization"})
+        else:
+            health_score -= 10
+            health_checklist.append({"status": "warn", "text": "High room clashes/usage"})
+            
+        if underused_rooms_count > 0:
+            health_checklist.append({"status": "info", "text": f"{underused_rooms_count} underutilized rooms"})
+
+        # Check Batches
+        if unscheduled_batches == 0:
+            health_checklist.append({"status": "pass", "text": "All batches scheduled"})
+        else:
+            health_score -= (unscheduled_batches * 5)
+            health_checklist.append({"status": "fail", "text": f"{unscheduled_batches} unscheduled batches"})
+
+        # Check Subjects
+        if unmapped_subjects > 0:
+            health_score -= (unmapped_subjects * 2)
+            health_checklist.append({"status": "fail", "text": f"{unmapped_subjects} unmapped subjects"})
+
+        health_score = max(0, min(100, health_score)) # Clamp between 0-100
+
+        # =========================================================
+        # 5. PREDICTIVE ANALYTICS ENGINE
+        # =========================================================
+        exp_fac_shortage = math.ceil(overworked_count * 0.5) + (2 if utilization > 90 else 0)
+        exp_room_shortage = math.ceil((utilization - 85) / 100 * room_count) if utilization > 85 else 0
+        
+        risk_level = "Low"
+        if health_score < 70 or exp_fac_shortage > 2: risk_level = "High"
+        elif health_score < 85 or exp_fac_shortage > 0: risk_level = "Medium"
+
+        predictive = {
+            "sufficient": "YES" if exp_fac_shortage == 0 and exp_room_shortage <= 0 else "NO",
+            "faculty_shortage": exp_fac_shortage,
+            "room_shortage": f"{exp_room_shortage} Labs/Rooms" if exp_room_shortage > 0 else "None",
+            "next_sem_risk": risk_level
+        }
+
+        # =========================================================
+        # 6. AI RECOMMENDATIONS (Dynamic)
         # =========================================================
         recommendations = []
-
-        # Insight A: Global Room Utilization
-        if utilization > 85:
-            recommendations.append({
-                "type": "error", "icon": "domain_disabled", "title": "Critical Room Shortage", 
-                "message": f"Campus-wide room utilization is at {utilization}%. The scheduler will likely fail for new batches. Consider adding new rooms."
-            })
-        elif utilization < 40 and total_possible_slots > 0:
-            recommendations.append({
-                "type": "info", "icon": "energy_savings_leaf", "title": "Low Room Utilization", 
-                "message": f"Campus room utilization is only {utilization}%. Consider consolidating classes into fewer buildings to save operational costs."
-            })
-
-        # Insight B: Faculty Burnout Risk across Uni
-        overworked = [f["name"] for f in faculty_load if f["max_weekly_hours"] > 0 and (f["assigned_hours"] / f["max_weekly_hours"]) >= 0.9]
-        if overworked:
-            names = ", ".join(overworked[:2]).replace("Faculty_", "Prof. ") + ("..." if len(overworked) > 2 else "")
-            recommendations.append({
-                "type": "warning", "icon": "psychology", "title": "Faculty Burnout Risk", 
-                "message": f"{names} are operating at or above 90% of their maximum contract capacity. Consider reassigning classes."
-            })
-
-        # Insight C: Unscheduled Batches across all departments
-        cursor.execute("""
-            SELECT b.name FROM batches b 
-            LEFT JOIN timetables t ON b.id = t.batch_id 
-            GROUP BY b.id, b.name HAVING COUNT(t.id) = 0
-        """)
-        unscheduled = cursor.fetchall()
-        if unscheduled:
-            recommendations.append({
-                "type": "action", "icon": "calendar_month", "title": "Unscheduled Batches Detected", 
-                "message": f"{len(unscheduled)} batches (including {unscheduled[0]['name']}) currently have no published timetables."
-            })
-
-        # Insight D: Unmapped Subjects globally
-        cursor.execute("""
-            SELECT s.name FROM subjects s 
-            LEFT JOIN faculty_expertise fe ON s.id = fe.subject_id 
-            GROUP BY s.id, s.name HAVING COUNT(fe.faculty_id) = 0
-        """)
-        unmapped = cursor.fetchall()
-        if unmapped:
-            recommendations.append({
-                "type": "error", "icon": "menu_book", "title": "Unassigned Subjects", 
-                "message": f"{len(unmapped)} subjects lack faculty expertise mappings. The engine will crash until a professor is mapped to them."
-            })
-
-        # Fallback: If everything is perfect
+        if exp_fac_shortage > 0:
+            recommendations.append({"type": "warning", "icon": "person_add", "title": "Hire New Faculty", "message": f"Predictive models suggest hiring {exp_fac_shortage} new professors to maintain health next semester."})
+        if exp_room_shortage > 0:
+            recommendations.append({"type": "error", "icon": "domain_disabled", "title": "Room Shortage Predicted", "message": f"You will need {exp_room_shortage} additional rooms to comfortably house next semester's batches."})
+        if unmapped_subjects > 0:
+            recommendations.append({"type": "action", "icon": "menu_book", "title": "Map Expertise", "message": f"{unmapped_subjects} subjects are unteachable right now. Map faculty to them immediately."})
         if not recommendations:
-            recommendations.append({
-                "type": "success", "icon": "auto_awesome", "title": "University Optimized", 
-                "message": "All university parameters are within healthy thresholds. No immediate administrative actions required."
-            })
+            recommendations.append({"type": "success", "icon": "auto_awesome", "title": "Perfect Harmony", "message": "No predictive risks detected. Current resources are perfectly balanced."})
 
         return {
             "success": True,
-            "total_faculty": fac_count,
-            "active_batches": batch_count,
-            "room_utilization": utilization,
-            "faculty_load": faculty_load,
+            "stats": {
+                "departments": dept_count, "faculty": fac_count, "students": student_count,
+                "rooms": room_count, "subjects": subject_count, "issues": total_issues,
+                "utilization": utilization, "version": "v3.1 (Live)"
+            },
+            "health": { "score": health_score, "checklist": health_checklist },
+            "predictive": predictive,
+            "faculty_load": faculty_load[:15], # Top 15 for Chart
             "recommendations": recommendations 
         }
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cursor.close()
         release_db_connection(conn)
+        
+        
+        
