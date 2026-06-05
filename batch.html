@@ -267,6 +267,31 @@
               class="w-full bg-surface hand-drawn-border-sm p-3 focus:outline-none focus:ring-4 focus:ring-secondary-container text-body-md"
             />
           </div>
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Semester <span class="text-error">*</span></label
+            >
+            <div class="relative">
+              <select
+                id="batchSemester"
+                required
+                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+              >
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                >expand_more</span
+              >
+            </div>
+          </div>
 
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
@@ -353,7 +378,31 @@
               class="w-full bg-surface hand-drawn-border-sm p-3 focus:outline-none focus:ring-4 focus:ring-secondary-container text-body-md"
             />
           </div>
-
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Semester <span class="text-error">*</span></label
+            >
+            <div class="relative">
+              <select
+                id="editBatchSemester"
+                required
+                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+              >
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                >expand_more</span
+              >
+            </div>
+          </div>
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
               >Student Count <span class="text-error">*</span></label
@@ -505,6 +554,11 @@
               <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">group</span>
               <span class="font-label-md text-on-surface-variant">Students: <strong class="text-primary">${batch.student_count}</strong></span>
             </div>
+
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">school</span>
+              <span class="font-label-md text-on-surface-variant">Semester: <strong class="text-primary">${batch.semester || 1}</strong></span>
+            </div>
             
             <div class="flex items-center gap-3">
               <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">person</span>
@@ -534,11 +588,14 @@
 
           const mentorVal = document.getElementById("batchMentor").value;
           const batchData = {
-            department_id: CURRENT_DEPT_ID, // <-- Uses the Global ID automatically!
-            name: document.getElementById("batchName").value,
+            department_id: CURRENT_DEPT_ID,
+            name: document.getElementById("editBatchName").value,
             student_count: parseInt(
-              document.getElementById("batchStudentCount").value,
+              document.getElementById("editBatchStudentCount").value,
             ),
+            semester: parseInt(
+              document.getElementById("editBatchSemester").value,
+            ), // <-- NEW
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
@@ -578,6 +635,8 @@
         const batch = globalBatchesData[id];
 
         document.getElementById("editBatchName").value = batch.name;
+        document.getElementById("editBatchSemester").value =
+          batch.semester || 1; // <-- NEW
         document.getElementById("editBatchStudentCount").value =
           batch.student_count;
 
@@ -606,11 +665,12 @@
 
           const mentorVal = document.getElementById("editBatchMentor").value;
           const batchData = {
-            department_id: CURRENT_DEPT_ID, // <-- Uses the Global ID automatically!
-            name: document.getElementById("editBatchName").value,
+            department_id: CURRENT_DEPT_ID,
+            name: document.getElementById("batchName").value,
             student_count: parseInt(
-              document.getElementById("editBatchStudentCount").value,
+              document.getElementById("batchStudentCount").value,
             ),
+            semester: parseInt(document.getElementById("batchSemester").value), // <-- NEW
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 

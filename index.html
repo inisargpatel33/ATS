@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartSched Uni - Admin Dashboard</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -21,57 +22,20 @@
           extend: {
             colors: {
               surface: "#fdf8f8",
-              "primary-fixed-dim": "#c8c6c6",
-              "on-error-container": "#93000a",
-              outline: "#747878",
-              "on-primary": "#ffffff",
               "on-surface-variant": "#444748",
-              "tertiary-fixed": "#d8e8c7",
-              "on-secondary-fixed": "#001e2c",
-              "surface-variant": "#e5e2e1",
-              "on-primary-container": "#959494",
-              "primary-fixed": "#e4e2e1",
-              "on-secondary": "#ffffff",
-              "surface-container-high": "#ebe7e7",
-              "on-tertiary-fixed": "#131f0b",
-              "outline-variant": "#c4c7c7",
-              secondary: "#456273",
-              "on-secondary-fixed-variant": "#2d4a5a",
-              "inverse-primary": "#c8c6c6",
-              "on-surface": "#1c1b1b",
               primary: "#181919",
+              secondary: "#456273",
               "secondary-container": "#c8e7fb",
+              "tertiary-fixed": "#d8e8c7",
               error: "#ba1a1a",
-              tertiary: "#101c08",
-              "on-tertiary": "#ffffff",
-              "surface-container": "#f1edec",
-              "surface-container-highest": "#e5e2e1",
-              background: "#fdf8f8",
-              "inverse-surface": "#313030",
-              "on-primary-fixed-variant": "#474747",
-              "secondary-fixed": "#c8e7fb",
-              "surface-container-lowest": "#ffffff",
-              "tertiary-container": "#24311b",
-              "on-background": "#1c1b1b",
-              "on-error": "#ffffff",
-              "surface-tint": "#5f5e5e",
-              "inverse-on-surface": "#f4f0ef",
-              "primary-container": "#2d2d2d",
-              "surface-container-low": "#f7f3f2",
-              "surface-dim": "#ddd9d8",
-              "on-primary-fixed": "#1b1c1c",
-              "surface-bright": "#fdf8f8",
-              "tertiary-fixed-dim": "#bcccac",
-              "on-tertiary-container": "#8a9a7d",
-              "on-secondary-container": "#4b6879",
-              "on-tertiary-fixed-variant": "#3d4b33",
-              "secondary-fixed-dim": "#adcbde",
               "error-container": "#ffdad6",
+              "surface-container": "#f1edec",
+              "surface-variant": "#e5e2e1",
+              "on-primary": "#ffffff",
             },
             fontFamily: {
               "headline-md": ["Bricolage Grotesque"],
               "headline-lg": ["Bricolage Grotesque"],
-              "body-lg": ["Plus Jakarta Sans"],
               "display-lg": ["Bricolage Grotesque"],
               "body-md": ["Plus Jakarta Sans"],
               "label-md": ["Plus Jakarta Sans"],
@@ -91,26 +55,20 @@
         display: inline-block;
         line-height: 1;
       }
-
-      /* Retained doodle borders for dashboard summary cards */
       .hand-drawn-border {
         border: 2px solid #181919;
         border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
       }
-
       .hand-drawn-border-sm {
         border: 2px solid #181919;
         border-radius: 12px 4px 14px 5px/4px 12px 5px 14px;
       }
-
       .offset-shadow {
         box-shadow: 6px 6px 0px 0px rgba(24, 25, 25, 1);
       }
-
       .offset-shadow-sm {
         box-shadow: 4px 4px 0px 0px rgba(24, 25, 25, 1);
       }
-
       .marker-stroke-blue {
         border-top: 8px solid #c8e7fb;
       }
@@ -119,6 +77,18 @@
       }
       .marker-stroke-yellow {
         border-top: 8px solid #f7f3f2;
+      }
+      ::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1edec;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #181919;
+        border-radius: 4px;
       }
     </style>
   </head>
@@ -178,7 +148,7 @@
           <span class="font-label-md">Subjects</span>
         </a>
         <a
-          href="scheduler.html"
+          href="schedular.html"
           class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low hover:shadow-[2px_2px_0px_0px_rgba(24,25,25,1)] transition-all active:scale-95"
         >
           <span class="material-symbols-outlined">auto_awesome</span>
@@ -242,6 +212,16 @@
             />
           </div>
           <div class="flex items-center gap-2 md:gap-3">
+            <div
+              class="hidden md:flex items-center gap-2 bg-tertiary-fixed border-2 border-primary rounded-full px-4 py-1.5 mr-4 shadow-[2px_2px_0px_0px_rgba(24,25,25,1)]"
+            >
+              <span class="material-symbols-outlined text-sm text-primary"
+                >public</span
+              >
+              <span class="font-label-md font-bold text-primary"
+                >Global Campus View</span
+              >
+            </div>
             <button
               class="p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95"
             >
@@ -278,14 +258,15 @@
             <p
               class="font-body-lg text-lg text-on-surface-variant max-w-lg mx-auto lg:mx-0"
             >
-              Welcome back to your academic command center. Everything looks
-              organized for the upcoming week. Your schedules are 94% optimized!
+              Welcome back to your academic command center. Here is the live
+              workload breakdown for the currently selected department.
             </p>
             <div class="pt-4">
               <button
+                onclick="window.location.href = 'scheduler.html'"
                 class="bg-secondary text-on-secondary hover:bg-[#344d5a] font-label-md px-8 py-4 rounded-lg offset-shadow-sm active:scale-95 transition-all w-full sm:w-auto text-lg border-2 border-primary"
               >
-                View Today's Priorities
+                Launch Scheduler
               </button>
             </div>
           </div>
@@ -315,12 +296,12 @@
               </h3>
             </div>
             <div class="flex items-baseline gap-2 mt-4">
-              <span class="font-display-lg text-3xl md:text-4xl text-primary"
-                >142</span
+              <span
+                id="statFaculty"
+                class="font-display-lg text-3xl md:text-4xl text-primary"
+                >--</span
               >
-              <span class="text-tertiary-container font-label-sm"
-                >+3 this week</span
-              >
+              <span class="text-tertiary-container font-label-sm">Active</span>
             </div>
           </div>
 
@@ -336,12 +317,12 @@
               </h3>
             </div>
             <div class="flex items-baseline gap-2 mt-4">
-              <span class="font-display-lg text-3xl md:text-4xl text-primary"
-                >28</span
+              <span
+                id="statBatches"
+                class="font-display-lg text-3xl md:text-4xl text-primary"
+                >--</span
               >
-              <span class="text-on-surface-variant font-label-sm"
-                >In 4 Depts</span
-              >
+              <span class="text-on-surface-variant font-label-sm">Total</span>
             </div>
           </div>
 
@@ -353,14 +334,16 @@
                 >meeting_room</span
               >
               <h3 class="font-label-md text-on-surface-variant">
-                Rooms Occupied
+                Room Utilization
               </h3>
             </div>
             <div class="flex items-baseline gap-2 mt-4">
-              <span class="font-display-lg text-3xl md:text-4xl text-primary"
-                >82%</span
+              <span
+                id="statRoomUtil"
+                class="font-display-lg text-3xl md:text-4xl text-primary"
+                >--%</span
               >
-              <span class="text-error font-label-sm">High Load</span>
+              <span class="text-error font-label-sm">Campus Wide</span>
             </div>
           </div>
 
@@ -371,177 +354,70 @@
               <span class="material-symbols-outlined text-primary mb-3 md:mb-4"
                 >sync</span
               >
-              <h3 class="font-label-md text-on-surface-variant">Next Sync</h3>
+              <h3 class="font-label-md text-on-surface-variant">
+                Engine Status
+              </h3>
             </div>
             <div class="flex items-baseline gap-2 mt-4">
-              <span class="font-display-lg text-3xl md:text-4xl text-primary"
-                >14:00</span
+              <span class="font-display-lg text-2xl md:text-3xl text-primary"
+                >Online</span
               >
-              <span class="text-on-surface-variant font-label-sm"
-                >Auto-generate</span
-              >
+              <span class="text-on-surface-variant font-label-sm">Ready</span>
             </div>
           </div>
         </section>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <section class="lg:col-span-2 space-y-4 md:space-y-6">
-            <div class="flex justify-between items-center">
-              <h3 class="font-headline-md text-xl md:text-2xl text-primary">
-                Recent Activity
-              </h3>
-              <button
-                class="font-label-md text-secondary border-b-2 border-secondary hover:opacity-70 transition-opacity"
-              >
-                View All
-              </button>
-            </div>
-
-            <div class="bg-white hand-drawn-border-sm p-4 md:p-6 space-y-6">
-              <div
-                class="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start pb-6 border-b border-surface-variant"
-              >
-                <div
-                  class="w-10 h-10 rounded-lg bg-secondary-container border border-primary flex items-center justify-center shrink-0"
-                >
-                  <span class="material-symbols-outlined text-primary"
-                    >person_add</span
-                  >
-                </div>
-                <div class="flex-1 w-full">
-                  <div class="flex justify-between items-start">
-                    <h4 class="font-label-md text-primary">
-                      New Faculty Added
-                    </h4>
-                    <span
-                      class="font-label-sm text-on-surface-variant whitespace-nowrap ml-2"
-                      >2 mins ago</span
-                    >
-                  </div>
-                  <p
-                    class="text-body-md text-on-surface-variant mt-1 text-sm md:text-base"
-                  >
-                    Dr. Aris Thorne joined the Computer Science department.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                class="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start pb-6 border-b border-surface-variant"
-              >
-                <div
-                  class="w-10 h-10 rounded-lg bg-tertiary-fixed border border-primary flex items-center justify-center shrink-0"
-                >
-                  <span class="material-symbols-outlined text-primary"
-                    >auto_awesome</span
-                  >
-                </div>
-                <div class="flex-1 w-full">
-                  <div class="flex justify-between items-start">
-                    <h4 class="font-label-md text-primary">
-                      Schedule Generated
-                    </h4>
-                    <span
-                      class="font-label-sm text-on-surface-variant whitespace-nowrap ml-2"
-                      >45 mins ago</span
-                    >
-                  </div>
-                  <p
-                    class="text-body-md text-on-surface-variant mt-1 text-sm md:text-base"
-                  >
-                    Final Year B.Tech Timetable (Autumn 24) has been compiled.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                class="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start bg-error-container border-2 border-error rounded-xl p-4 md:p-5 shadow-[4px_4px_0px_0px_#ba1a1a]"
-              >
-                <div
-                  class="w-10 h-10 rounded-lg bg-white border border-error flex items-center justify-center shrink-0"
-                >
-                  <span class="material-symbols-outlined text-error"
-                    >warning</span
-                  >
-                </div>
-                <div class="flex-1 w-full">
-                  <div class="flex justify-between items-start">
-                    <h4 class="font-label-md text-error font-bold">
-                      Conflict Detected
-                    </h4>
-                    <span
-                      class="font-label-sm text-error opacity-80 whitespace-nowrap ml-2"
-                      >4 hours ago</span
-                    >
-                  </div>
-                  <p
-                    class="text-body-md text-on-surface-variant mt-1 text-sm md:text-base"
-                  >
-                    Professor Snape has a double booking in Room 101 on Monday.
-                    Action required.
-                  </p>
-                </div>
+            <h3 class="font-headline-md text-xl md:text-2xl text-primary">
+              Faculty Workload Analysis
+            </h3>
+            <div
+              class="bg-white hand-drawn-border-sm offset-shadow-sm p-4 md:p-6"
+            >
+              <div class="relative h-[300px] w-full">
+                <canvas id="facultyWorkloadChart"></canvas>
               </div>
             </div>
           </section>
 
           <section class="space-y-4 md:space-y-6">
-            <h3 class="font-headline-md text-xl md:text-2xl text-primary">
-              Shortcuts
-            </h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
-              <button
-                class="group bg-white hand-drawn-border-sm p-4 flex items-center gap-4 hover:bg-secondary-container transition-all text-left"
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-secondary"
+                >auto_awesome</span
               >
-                <div
-                  class="p-3 rounded-full bg-surface-container border border-primary group-hover:bg-white transition-colors"
-                >
-                  <span class="material-symbols-outlined">upload_file</span>
-                </div>
-                <div>
-                  <h4 class="font-label-md text-primary">Import Batch Data</h4>
-                  <p class="text-label-sm text-on-surface-variant">
-                    CSV or Excel files
-                  </p>
-                </div>
-              </button>
+              <h3 class="font-headline-md text-xl md:text-2xl text-primary">
+                AI Insights
+              </h3>
+            </div>
 
-              <button
-                class="group bg-white hand-drawn-border-sm p-4 flex items-center gap-4 hover:bg-secondary-container transition-all text-left"
-              >
-                <div
-                  class="p-3 rounded-full bg-surface-container border border-primary group-hover:bg-white transition-colors"
-                >
-                  <span class="material-symbols-outlined">print</span>
-                </div>
-                <div>
-                  <h4 class="font-label-md text-primary">Export PDF Report</h4>
-                  <p class="text-label-sm text-on-surface-variant">
-                    Weekly performance stats
-                  </p>
-                </div>
-              </button>
-
+            <div id="aiRecommendationsContainer" class="grid grid-cols-1 gap-4">
               <div
-                class="bg-primary text-on-primary hand-drawn-border-sm offset-shadow-sm p-5 md:p-6 space-y-4 sm:col-span-2 lg:col-span-1 mt-2"
+                class="p-6 text-center text-on-surface-variant animate-pulse border-2 border-dashed border-outline-variant rounded-lg"
               >
-                <h4 class="font-headline-md text-xl text-on-primary">
-                  System Health
-                </h4>
-                <div class="space-y-3">
-                  <div class="flex justify-between text-label-sm">
-                    <span>Optimization Engine</span>
-                    <span class="text-tertiary-fixed font-bold">Active</span>
-                  </div>
-                  <div
-                    class="w-full bg-primary-container h-2 rounded-full overflow-hidden"
-                  >
-                    <div class="bg-tertiary-fixed h-full w-[88%]"></div>
-                  </div>
-                  <p class="text-label-sm text-on-primary-container italic">
-                    Last backup: 12 minutes ago
-                  </p>
+                Scanning database for insights...
+              </div>
+            </div>
+
+            <div
+              class="bg-primary text-on-primary hand-drawn-border-sm offset-shadow-sm p-5 md:p-6 space-y-4 mt-2"
+            >
+              <h4 class="font-headline-md text-xl text-on-primary">
+                System Health
+              </h4>
+              <div class="space-y-3">
+                <div class="flex justify-between text-label-sm">
+                  <span>Optimization Engine</span>
+                  <span class="text-tertiary-fixed font-bold">Active</span>
                 </div>
+                <div
+                  class="w-full bg-[#2d2d2d] h-2 rounded-full overflow-hidden"
+                >
+                  <div class="bg-tertiary-fixed h-full w-[100%]"></div>
+                </div>
+                <p class="text-label-sm text-[#959494] italic">
+                  Live connection to Database
+                </p>
               </div>
             </div>
           </section>
@@ -592,5 +468,150 @@
         <span class="font-label-sm text-[10px]">Admin</span>
       </a>
     </nav>
+
+    <script>
+      const API_URL = "http://127.0.0.1:8000";
+      let workloadChart = null;
+
+      // Fetch the global data IMMEDIATELY when the page loads!
+      document.addEventListener("DOMContentLoaded", async () => {
+        await fetchGlobalDashboardData();
+      });
+
+      async function fetchGlobalDashboardData() {
+        try {
+          // Pointing to the new /global endpoint (No Department ID required!)
+          const res = await fetch(`${API_URL}/dashboard-stats/global`);
+          const data = await res.json();
+
+          if (data.success) {
+            // 1. Update Top Summary Cards
+            document.getElementById("statFaculty").innerText =
+              data.total_faculty;
+            document.getElementById("statBatches").innerText =
+              data.active_batches;
+            document.getElementById("statRoomUtil").innerText =
+              data.room_utilization + "%";
+
+            // 2. Set color of utilization based on load
+            const utilText =
+              document.getElementById("statRoomUtil").nextElementSibling;
+            if (data.room_utilization > 85) {
+              utilText.className = "text-error font-label-sm";
+              utilText.innerText = "High Load";
+            } else {
+              utilText.className = "text-on-surface-variant font-label-sm";
+              utilText.innerText = "Healthy";
+            }
+
+            // 3. Render Top 20 Faculty Workload Chart
+            renderChart(data.faculty_load);
+
+            // 4. Render the Global AI Recommendations
+            renderRecommendations(data.recommendations);
+          }
+        } catch (e) {
+          console.error("Dashboard fetch error", e);
+          document.getElementById("aiRecommendationsContainer").innerHTML = `
+            <div class="p-6 text-center text-error border-2 border-dashed border-error rounded-lg">
+                Could not connect to backend server. Make sure Python is running!
+            </div>
+          `;
+        }
+      }
+
+      function renderChart(facultyLoadData) {
+        const ctx = document
+          .getElementById("facultyWorkloadChart")
+          .getContext("2d");
+
+        const labels = facultyLoadData.map((f) =>
+          f.name.replace("Faculty_", "F"),
+        );
+        const assignedData = facultyLoadData.map((f) => f.assigned_hours);
+        const maxData = facultyLoadData.map((f) => f.max_weekly_hours);
+
+        if (workloadChart) workloadChart.destroy();
+
+        workloadChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Assigned Hours",
+                data: assignedData,
+                backgroundColor: "#181919",
+                borderRadius: 4,
+                barPercentage: 0.6,
+              },
+              {
+                label: "Max Contract Capacity",
+                data: maxData,
+                backgroundColor: "#e5e2e1",
+                borderRadius: 4,
+                barPercentage: 0.6,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: "top",
+                labels: { font: { family: "Plus Jakarta Sans", size: 12 } },
+              },
+              tooltip: {
+                backgroundColor: "#181919",
+                titleFont: { family: "Bricolage Grotesque", size: 14 },
+                bodyFont: { family: "Plus Jakarta Sans", size: 13 },
+              },
+            },
+            scales: {
+              y: { beginAtZero: true, grid: { color: "#f1edec" } },
+              x: { grid: { display: false } },
+            },
+          },
+        });
+      }
+
+      function renderRecommendations(recommendations) {
+        const container = document.getElementById("aiRecommendationsContainer");
+        container.innerHTML = "";
+
+        recommendations.forEach((rec) => {
+          let bgClass = "bg-white";
+          let iconColor = "text-primary";
+          let borderClass = "border-primary hover:bg-surface-container";
+
+          if (rec.type === "error") {
+            bgClass = "bg-error-container";
+            iconColor = "text-error";
+            borderClass = "border-error";
+          } else if (rec.type === "warning") {
+            bgClass = "bg-[#FFE194]";
+          } else if (rec.type === "success") {
+            bgClass = "bg-tertiary-fixed";
+          } else if (rec.type === "action") {
+            bgClass = "bg-secondary-container";
+          }
+
+          const html = `
+            <div class="${bgClass} hand-drawn-border-sm p-4 flex items-start gap-4 transition-all text-left border-2 ${borderClass}">
+              <div class="p-2 rounded-full bg-white/50 border border-primary/20 shrink-0 mt-1">
+                <span class="material-symbols-outlined ${iconColor}">${rec.icon}</span>
+              </div>
+              <div>
+                <h4 class="font-label-md text-primary font-bold">${rec.title}</h4>
+                <p class="text-body-md text-on-surface-variant leading-tight mt-1">${rec.message}</p>
+              </div>
+            </div>
+          `;
+          container.innerHTML += html;
+        });
+      }
+    </script>
+    <script src="global.js"></script>
   </body>
 </html>

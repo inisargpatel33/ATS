@@ -205,6 +205,31 @@
             <form id="newSubjectForm" class="space-y-5">
               <div class="flex flex-col space-y-2">
                 <label class="font-label-md text-primary font-bold"
+                  >Semester <span class="text-error">*</span></label
+                >
+                <div class="relative">
+                  <select
+                    id="subjectSemester"
+                    required
+                    class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+                  >
+                    <option value="1">Semester 1</option>
+                    <option value="2">Semester 2</option>
+                    <option value="3">Semester 3</option>
+                    <option value="4">Semester 4</option>
+                    <option value="5">Semester 5</option>
+                    <option value="6">Semester 6</option>
+                    <option value="7">Semester 7</option>
+                    <option value="8">Semester 8</option>
+                  </select>
+                  <span
+                    class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                    >expand_more</span
+                  >
+                </div>
+              </div>
+              <div class="flex flex-col space-y-2">
+                <label class="font-label-md text-primary font-bold"
                   >Subject Name <span class="text-error">*</span></label
                 >
                 <input
@@ -327,6 +352,31 @@
         </div>
 
         <form id="editSubjectForm" class="space-y-6">
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Semester <span class="text-error">*</span></label
+            >
+            <div class="relative">
+              <select
+                id="editSubjectSemester"
+                required
+                class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
+              >
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
+                >expand_more</span
+              >
+            </div>
+          </div>
           <div class="flex flex-col gap-2">
             <label class="font-label-md text-primary font-bold"
               >Subject Name <span class="text-error">*</span></label
@@ -430,7 +480,7 @@
       // --- 2. FETCH SUBJECTS ---
       async function fetchSubjects() {
         if (!CURRENT_DEPT_ID) {
-          subjectTableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-on-surface-variant italic">Please create a department first.</td></tr>`;
+          subjectTableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-on-surface-variant italic">Please create a department first.</td></tr>`;
           return;
         }
 
@@ -444,7 +494,7 @@
           globalSubjectsData = {};
 
           if (data.data.length === 0) {
-            subjectTableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-on-surface-variant italic">No subjects found.</td></tr>`;
+            subjectTableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-on-surface-variant italic">No subjects found.</td></tr>`;
             return;
           }
 
@@ -463,7 +513,7 @@
             const row = `
         <tr class="hover:bg-surface-container-lowest transition-colors">
           <td class="py-4 px-4 font-label-md text-primary font-bold">${subject.name}</td>
-          <td class="py-4 px-4 text-center">
+          <td class="py-4 px-4 text-center font-bold text-primary">Sem ${subject.semester || 1}</td> <td class="py-4 px-4 text-center">
             <span class="inline-flex px-3 py-1 rounded-full text-label-sm border ${typePillClass}">${subject.subject_type}</span>
           </td>
           <td class="py-4 px-4 text-on-surface-variant text-center">${subject.required_sessions}</td>
@@ -493,8 +543,12 @@
           submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">sync</span> Saving...`;
           statusMsg.classList.add("hidden");
 
+          // ADDED 'semester' to the payload
           const subjectData = {
-            department_id: CURRENT_DEPT_ID, // <-- Uses Global ID automatically!
+            department_id: CURRENT_DEPT_ID,
+            semester: parseInt(
+              document.getElementById("subjectSemester").value,
+            ),
             name: document.getElementById("subjectName").value,
             subject_type: document.getElementById("subjectType").value,
             required_sessions: parseInt(
@@ -536,6 +590,9 @@
         currentlyEditingSubjectId = id;
         const subject = globalSubjectsData[id];
 
+        // ADDED loading the semester into the edit modal
+        document.getElementById("editSubjectSemester").value =
+          subject.semester || 1;
         document.getElementById("editSubjectName").value = subject.name;
         document.getElementById("editSubjectType").value = subject.subject_type;
         document.getElementById("editSubjectSessions").value =
@@ -561,8 +618,12 @@
           submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">sync</span> Updating...`;
           statusMsg.classList.add("hidden");
 
+          // ADDED 'semester' to the payload
           const subjectData = {
-            department_id: CURRENT_DEPT_ID, // <-- Uses Global ID automatically!
+            department_id: CURRENT_DEPT_ID,
+            semester: parseInt(
+              document.getElementById("editSubjectSemester").value,
+            ),
             name: document.getElementById("editSubjectName").value,
             subject_type: document.getElementById("editSubjectType").value,
             required_sessions: parseInt(

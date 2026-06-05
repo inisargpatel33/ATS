@@ -6,6 +6,11 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import errors
 from ortools.sat.python import cp_model
+from collections import defaultdict
+import math
+import random
+# from celery import Celery
+# from celery.result import AsyncResult
 from psycopg2 import pool # NEW: Import the pool module
 # from contextlib import contextmanager # NEW: For safe connection handling
 
@@ -26,8 +31,8 @@ app.add_middleware(
 #  =========================================================
 # DATABASE CONNECTION POOL
 # =========================================================
+# DATABASE_URL = "postgresql://postgres:Nsrg%4033patel@db.rxseblfkhgyzuimejnmu.supabase.co:5432/postgres"
 DATABASE_URL = "postgresql://postgres:Nsrg%4033patel@db.rxseblfkhgyzuimejnmu.supabase.co:5432/postgres"
-
 # Initialize a Threaded Connection Pool (Min 1, Max 20 connections)
 # This keeps connections "warm" and ready for instant use across FastAPI threads.
 try:
@@ -42,14 +47,61 @@ except Exception as e:
     print("❌ Failed to initialize connection pool:", e)
     db_pool = None
     
+# def get_db_connection():
+#     if db_pool is None:
+#         raise HTTPException("Database connection pool is not available")
+#     return db_pool.getconn()
+
+
 def get_db_connection():
     if db_pool is None:
-        raise HTTPException("Database connection pool is not available")
-    return db_pool.getconn()
+        raise HTTPException(status_code=500, detail="Database connection pool is not available")
+    
+    # Try up to 3 times to find or create a living connection
+    for _ in range(3):
+        conn = None
+        try:
+            conn = db_pool.getconn()
+            
+            # --- THE SELF-HEALING HEALTH CHECK ---
+            # Execute a dummy query to verify Supabase hasn't closed the socket
+            with conn.cursor() as test_cursor:
+                test_cursor.execute("SELECT 1;")
+                
+            return conn # Connection is alive and healthy!
+            
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            print("⚠️ Production Warning: Detected a dead connection socket from pool. Discarding...")
+            if conn:
+                try:
+                    # Evict the dead socket completely from the pool so it isn't used again
+                    db_pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database extraction failure: {str(e)}")
+            
+    raise HTTPException(status_code=500, detail="Could not obtain a stable database stream from the pool after retries.")
 
 def release_db_connection(conn):
     if db_pool and conn:
         db_pool.putconn(conn)
+        
+        
+# =========================================================
+# CELERY BACKGROUND WORKER SETUP
+# =========================================================
+# Redis acts as the message broker and the result backend
+# celery_app = Celery(
+#     "timetable_worker",
+#     broker="redis://localhost:6379/0",
+#     backend="redis://localhost:6379/0"
+# )
+
+# celery_app.conf.update(
+#     task_track_started=True,
+#     result_expires=3600
+# )
         
 
 # =========================================================
@@ -86,6 +138,14 @@ class DeptCreate(BaseModel):
     name: str
 
 
+class SwapValidationRequest(BaseModel):
+    batch_id: int
+    faculty_id: int
+    room_id: int
+    new_day: str
+    new_timeslot: str
+
+
 class FacultyCreate(BaseModel):
     department_id: int
     name: str
@@ -106,6 +166,14 @@ class BatchCreate(BaseModel):
     student_count: int
     mentor_id: Optional[int] = None
     department_id: int
+    semester: int = 1  # <-- NEW
+
+class SubjectCreate(BaseModel):
+    name: str
+    subject_type: str
+    required_sessions: int
+    department_id: int
+    semester: int = 1  # <-- NEW
     # shift: str = "Morning"
 
     # CHANGE:
@@ -118,11 +186,11 @@ class BatchCreate(BaseModel):
     #     return v
 
 
-class SubjectCreate(BaseModel):
-    name: str
-    subject_type: str
-    required_sessions: int
-    department_id: int
+# class SubjectCreate(BaseModel):
+#     name: str
+#     subject_type: str
+#     required_sessions: int
+#     department_id: int
 
 
 class ExpertiseCreate(BaseModel):
@@ -411,37 +479,28 @@ def get_faculties():
         release_db_connection(conn)
 
 
+# =========================================================
+# SAFELY DELETE FACULTY
+# =========================================================
 @app.delete("/delete-faculty/{faculty_id}")
 def delete_faculty(faculty_id: int):
-
     conn = get_db_connection()
     cursor = conn.cursor()
-
     try:
-
-        cursor.execute("""
-            DELETE FROM faculties
-            WHERE id = %s
-            RETURNING id
-        """, (faculty_id,))
-
-        if cursor.rowcount == 0:
-            raise HTTPException(
-                status_code=404,
-                detail="Faculty not found"
-            )
-
+        cursor.execute("DELETE FROM faculties WHERE id = %s RETURNING id", (faculty_id,))
+        if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Faculty not found")
         conn.commit()
-
-        return {
-            "success": True,
-            "message": "Faculty deleted"
-        }
-
+        return {"success": True, "message": "Faculty deleted successfully"}
+        
+    except errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete this Professor. They are currently assigned to teach classes in a published Timetable."
+        )
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-
     finally:
         cursor.close()
         release_db_connection(conn)
@@ -483,7 +542,7 @@ def add_room(room: RoomCreate):
         release_db_connection(conn)
 
 
-#
+
 @app.get("/get-rooms/")
 def get_rooms():
     conn = get_db_connection()
@@ -512,21 +571,9 @@ def add_batch(batch: BatchCreate):
         # CHANGE:
         # Added shift insertion.
         cursor.execute("""
-            INSERT INTO batches (
-                name,
-                student_count,
-                mentor_id,
-                department_id,
-                shift
-            )
-            VALUES (%s,%s,%s,%s,%s)
-        """, (
-            batch.name,
-            batch.student_count,
-            batch.mentor_id,
-            batch.department_id,
-            batch.shift
-        ))
+                       insert into batches (name, student_count, mentor_id, department_id, semester)
+                          values (%s, %s, %s, %s, %s)
+        """, (batch.name, batch.student_count, batch.mentor_id, batch.department_id, batch.semester))
 
         conn.commit()
 
@@ -561,6 +608,7 @@ def get_batches(department_id: int):
                 b.student_count,
                 b.department_id,
                 b.mentor_id,
+                b.semester,
                 f.name AS mentor_name
             FROM batches b
             LEFT JOIN faculties f
@@ -578,6 +626,197 @@ def get_batches(department_id: int):
         release_db_connection(conn)
 
 
+@app.put("/edit-batch/{batch_id}")
+def edit_batch(batch_id: int, batch: BatchCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            UPDATE batches SET name = %s, student_count = %s, mentor_id = %s, department_id = %s, semester = %s
+            WHERE id = %s RETURNING id
+        """, (batch.name, batch.student_count, batch.mentor_id, batch.department_id, batch.semester, batch_id))
+        
+
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Batch not found in the database"
+            )
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Batch updated successfully"
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+        
+        
+# =========================================================
+# SAFELY DELETE BATCH
+# =========================================================
+@app.delete("/delete-batch/{batch_id}")
+def delete_batch(batch_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM batches WHERE id = %s RETURNING id", (batch_id,))
+        if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Batch not found")
+        conn.commit()
+        return {"success": True, "message": "Batch deleted successfully"}
+        
+    except errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete this Batch. It is currently being used in a published Timetable. Please delete its timetable first."
+        )
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+# =========================================================
+# MISSING ROOM ROUTES (UPDATE & DELETE)
+# =========================================================
+@app.put("/edit-room/{room_id}")
+def edit_room(room_id: int, room: RoomCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        has_projector = "Projector" in room.amenities
+        has_ac = "AC" in room.amenities
+        has_whiteboard = "Whiteboard" in room.amenities
+        has_computers = "Computers" in room.amenities
+
+        cursor.execute("""
+            UPDATE rooms SET
+                name = %s, capacity = %s, room_type = %s, has_projector = %s,
+                has_ac = %s, has_whiteboard = %s, has_computers = %s, 
+                extra_features = %s, is_active = %s
+            WHERE id = %s RETURNING id
+        """, (
+            room.name, room.capacity, room.room_type, has_projector, has_ac,
+            has_whiteboard, has_computers, room.extra_features, room.is_active,
+            room_id
+        ))
+        if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Room not found")
+        conn.commit()
+        return {"success": True, "message": "Room updated successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+# =========================================================
+# SAFELY DELETE ROOM
+# =========================================================
+@app.delete("/delete-room/{room_id}")
+def delete_room(room_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM rooms WHERE id = %s RETURNING id", (room_id,))
+        if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Room not found")
+        conn.commit()
+        return {"success": True, "message": "Room deleted successfully"}
+        
+    except errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete this Room. It is currently assigned to classes in a published Timetable."
+        )
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+# =========================================================
+# MISSING FACULTY ROUTES (UPDATE)
+# =========================================================
+@app.put("/edit-faculty/{faculty_id}")
+def edit_faculty(faculty_id: int, faculty: FacultyCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE faculties SET name = %s, max_weekly_hours = %s, department_id = %s
+            WHERE id = %s RETURNING id
+        """, (faculty.name, faculty.max_weekly_hours, faculty.department_id, faculty_id))
+        if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Faculty not found")
+        conn.commit()
+        return {"success": True, "message": "Faculty updated successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+# =========================================================
+# MISSING SUBJECT ROUTES (UPDATE & DELETE)
+# =========================================================
+@app.put("/edit-subject/{subject_id}")
+def edit_subject(subject_id: int, subject: SubjectCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        
+        cursor.execute("""
+            UPDATE subjects SET name = %s, subject_type = %s, required_sessions = %s, department_id = %s, semester = %s
+            WHERE id = %s RETURNING id
+        """, (subject.name, subject.subject_type, subject.required_sessions, subject.department_id, subject.semester, subject_id))
+        
+        
+        if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Subject not found")
+        conn.commit()
+        return {"success": True, "message": "Subject updated successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+# =========================================================
+# SAFELY DELETE SUBJECT
+# =========================================================
+@app.delete("/delete-subject/{subject_id}")
+def delete_subject(subject_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM subjects WHERE id = %s RETURNING id", (subject_id,))
+        if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Subject not found")
+        conn.commit()
+        return {"success": True, "message": "Subject deleted successfully"}
+        
+    except errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete this Subject. It is currently scheduled in a published Timetable."
+        )
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)
 # =========================================================
 # SUBJECT API
 # =========================================================
@@ -591,19 +830,10 @@ def add_subject(subject: SubjectCreate):
     try:
 
         cursor.execute("""
-            INSERT INTO subjects (
-                name,
-                subject_type,
-                required_sessions,
-                department_id
-            )
-            VALUES (%s,%s,%s,%s)
-        """, (
-            subject.name,
-            subject.subject_type,
-            subject.required_sessions,
-            subject.department_id
-        ))
+            INSERT INTO subjects (name, subject_type, required_sessions, department_id, semester)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (subject.name, subject.subject_type, subject.required_sessions, subject.department_id, subject.semester))
+        
 
         conn.commit()
 
@@ -635,6 +865,7 @@ def get_subjects(department_id: int):
                 s.name,
                 s.subject_type,
                 s.required_sessions,
+                s.semester,
                 d.name AS department_name
             FROM subjects s
             JOIN departments d
@@ -736,10 +967,22 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
         # =====================================================
         cursor.execute("SELECT * FROM faculties WHERE department_id = %s", (department_id,))
         faculties = cursor.fetchall()
+        
+        
+        # If generating for a specific batch, ONLY pull subjects for that batch's semester!
+        if payload.batch_id != "all":
+            cursor.execute("SELECT * FROM batches WHERE department_id = %s AND id = %s", (department_id, int(payload.batch_id)))
+            batches = cursor.fetchall()
+            
+            # NEW: Only fetch subjects matching this batch's semester
+            target_semester = batches[0]["semester"]
+            cursor.execute("SELECT * FROM subjects WHERE department_id = %s AND semester = %s", (department_id, target_semester))
+            subjects = cursor.fetchall()
+        else:
+            # If generating for the whole department, you have to group them by semester later in the math loop
+            pass
 
-        cursor.execute("SELECT * FROM subjects WHERE department_id = %s", (department_id,))
-        subjects = cursor.fetchall()
-
+        
         cursor.execute("SELECT * FROM rooms WHERE is_active = TRUE")
         rooms = cursor.fetchall()
 
@@ -747,7 +990,6 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
             cursor.execute("SELECT * FROM batches WHERE department_id = %s AND id = %s", (department_id, int(payload.batch_id)))
             batches = cursor.fetchall()
             
-            # NEW: Fetch existing bookings for OTHER batches to prevent double-booking!
             cursor.execute("""
                 SELECT faculty_id, room_id, day_of_week, timeslot
                 FROM timetables
@@ -760,62 +1002,24 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
             existing_bookings = []
 
         cursor.execute("""
-                        SELECT fe.faculty_id, fe.subject_id, fe.competency_tier
-                        FROM faculty_expertise fe
-                        JOIN faculties f ON fe.faculty_id = f.id
-                        WHERE f.department_id = %s
-                    """, (department_id,))
+            SELECT fe.faculty_id, fe.subject_id, fe.competency_tier
+            FROM faculty_expertise fe
+            JOIN faculties f ON fe.faculty_id = f.id
+            WHERE f.department_id = %s
+        """, (department_id,))
         expertise = cursor.fetchall()
 
         if not faculties or not subjects or not rooms or not batches:
-         return {"success": False, "message": "Missing required data"}
+            return {"success": False, "message": "Missing required data in this department."}
 
-                # =====================================================
-                # 2. EXPERTISE & ROOM MAPS
-                # =====================================================
-        exp_map = {(exp["faculty_id"], exp["subject_id"]): float(exp["competency_tier"]) for exp in expertise}
-
-        # NEW: Map valid rooms by BOTH subject and batch to strictly enforce capacity
-        eligible_rooms = {}
-        for subject in subjects:
-            for batch in batches:
-                valid_rooms = []
-                for room in rooms:
-                    # ---> THE FIX: Strict Capacity Check! <---
-                    if room["capacity"] >= batch["student_count"]:
-                        if subject["subject_type"] == "Practical" and room["room_type"] == "Laboratory":
-                            valid_rooms.append(room)
-                        elif subject["subject_type"] != "Practical" and room["room_type"] != "Laboratory":
-                            valid_rooms.append(room)
-                            
-                eligible_rooms[(subject["id"], batch["id"])] = valid_rooms
-
-                # =====================================================
-                    # =====================================================
-                    # 3. DYNAMIC SLOTS CONFIGURATION
-                    # =====================================================
-        # dynamic_slots = []
-        # for h in range(payload.start_hour, payload.end_hour):
-        #     if h == payload.break_hour:
-        #         continue # Skip the break period
-            
-        #     am_pm1 = "AM" if h < 12 or h == 24 else "PM"
-        #     disp1 = h if h <= 12 else h - 12
-        #     if disp1 == 0: disp1 = 12
-            
-        #     h2 = h + 1
-        #     am_pm2 = "AM" if h2 < 12 or h2 == 24 else "PM"
-        #     disp2 = h2 if h2 <= 12 else h2 - 12
-        #     if disp2 == 0: disp2 = 12
-            
-        #     dynamic_slots.append(f"{disp1:02d}:00 {am_pm1} - {disp2:02d}:00 {am_pm2}")
-        
-        # For simplicity, we'll use the centralized SHIFT_SLOTS configuration.
+        # =====================================================
+        # 2. DYNAMIC SLOTS CONFIGURATION
+        # =====================================================
         dynamic_slots = []
-        slot_hours = [] # <-- NEW: Track raw hours to detect the lunch break
+        slot_hours = [] 
         for h in range(payload.start_hour, payload.end_hour):
             if h == payload.break_hour:
-                continue # Skip the break period
+                continue 
             
             am_pm1 = "AM" if h < 12 or h == 24 else "PM"
             disp1 = h if h <= 12 else h - 12
@@ -829,26 +1033,59 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
             dynamic_slots.append(f"{disp1:02d}:00 {am_pm1} - {disp2:02d}:00 {am_pm2}")
             slot_hours.append(h)
 
+        # =====================================================
+        # 3. ENTERPRISE PRE-FLIGHT DIAGNOSTICS & HEURISTICS
+        # =====================================================
+        exp_map = {(exp["faculty_id"], exp["subject_id"]): float(exp["competency_tier"]) for exp in expertise}
         
+        # ---> FIX: Accurately calculate workload by matching batch semester to subject semester
+        total_req_hours = 0
+        for batch in batches:
+            batch_req_hours = sum(s["required_sessions"] for s in subjects if s["semester"] == batch["semester"])
+            total_req_hours += batch_req_hours
 
-                # =====================================================
-                # 4. THE 3-OPTION GENERATOR LOOP
-                # =====================================================
-        # scenarios = [
-        #     {"name": "Option 1: Balanced", "w_exp": 10, "w_room": 20, "w_morn": 3},
-        #     {"name": "Option 2: Minimum Movement", "w_exp": 5, "w_room": 100, "w_morn": 1},
-        #     {"name": "Option 3: Faculty Expertise Focus", "w_exp": 50, "w_room": 5, "w_morn": 1}
-        # ]
-        
+        total_fac_capacity = sum(f["max_weekly_hours"] for f in faculties)
+        if total_req_hours > total_fac_capacity:
+            return {"success": False, "message": f"MATH ERROR: Department requires {total_req_hours} teaching hours, but your staff can only teach {total_fac_capacity} hours combined!"}
+        # Diagnostic B: Batch Slot Limit Check
+        total_weekly_slots = len(DAYS) * len(dynamic_slots)
+        batch_req_hours = sum(s["required_sessions"] for s in subjects)
+        if batch_req_hours > total_weekly_slots:
+            return {"success": False, "message": f"MATH ERROR: Subjects require {batch_req_hours} hours/week, but your configured shift only has {total_weekly_slots} available slots!"}
+
+        # ---> FIX: Dynamic Room Buffer (Scales up for Global Generation)
+        room_buffer = 4 if payload.batch_id != "all" else max(4, len(batches) * 2)
+
+        eligible_rooms = {}
+        for batch in batches:
+            for subject in subjects:
+                # ---> CRITICAL FIX: Matrix Bloat Prevention! <---
+                # If the subject doesn't belong to the batch's semester, SKIP IT.
+                if subject["semester"] != batch["semester"]: 
+                    continue
+                    
+                valid_rooms = []
+                for room in rooms:
+                    if room["capacity"] >= batch["student_count"]:
+                        if subject["subject_type"] == "Practical" and room["room_type"] == "Laboratory":
+                            valid_rooms.append(room)
+                        elif subject["subject_type"] != "Practical" and room["room_type"] != "Laboratory":
+                            valid_rooms.append(room)
+                            
+                valid_rooms.sort(key=lambda r: r["capacity"])
+                eligible_rooms[(subject["id"], batch["id"])] = valid_rooms[:room_buffer]
+
+        # =====================================================
+        # 4. THE 3-OPTION GENERATOR LOOP
+        # =====================================================
         scenarios = [
-                    {"name": "Option 1: Balanced", "w_exp": 10, "w_room": 20},
-                    {"name": "Option 2: Minimum Movement", "w_exp": 5, "w_room": 100},
-                    {"name": "Option 3: Faculty Expertise Focus", "w_exp": 50, "w_room": 5}
-                ]
+            {"name": "Option 1: Balanced", "w_exp": 10, "w_room": 20},
+            {"name": "Option 2: Minimum Movement", "w_exp": 5, "w_room": 100},
+            {"name": "Option 3: Faculty Expertise Focus", "w_exp": 50, "w_room": 5}
+        ]
 
         generated_options = []
-
-        # Create lookup dictionaries for the UI
+        previous_solution_keys = []
         sub_dict = {s['id']: s['name'] for s in subjects}
         room_dict = {r['id']: r['name'] for r in rooms}
         fac_dict = {f['id']: f['name'] for f in faculties}
@@ -858,171 +1095,176 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
             model = cp_model.CpModel()
             x = {}
 
-            # --- VARIABLES ---
+            # --- 4A. O(1) LIGHTNING INDEXING ---
+            fac_day_slot = defaultdict(list)
+            room_day_slot = defaultdict(list)
+            batch_day_slot = defaultdict(list)
+            batch_subject = defaultdict(list)
+            fac_weekly = defaultdict(list)
+            fac_day = defaultdict(list)
+            batch_day_sub = defaultdict(list)
+            batch_day_slot_sub = defaultdict(list)
+            batch_day_slot_room = defaultdict(list)
+
             for faculty in faculties:
+                fac_id = faculty["id"]
                 for subject in subjects:
-                    if (faculty["id"], subject["id"]) not in exp_map: continue
+                    sub_id = subject["id"]
+                    if (fac_id, sub_id) not in exp_map: continue 
+                    
                     for batch in batches:
-                        # USE NEW TUPLE KEY HERE (Subject ID + Batch ID)
-                        for room in eligible_rooms[(subject["id"], batch["id"])]:
+                        b_id = batch["id"]
+                        if subject["semester"] != batch["semester"]:
+                            continue
+                        for room in eligible_rooms.get((sub_id, b_id), []):
+                            r_id = room["id"]
                             for day in DAYS:
                                 for slot in dynamic_slots:
-                                    key = (faculty["id"], subject["id"], room["id"], day, slot, batch["id"])
-                                    x[key] = model.NewBoolVar(f"x_{key}")
-    # --- HARD CONSTRAINTS (Conflicts) ---
-            for faculty in faculties:
-                for day in DAYS:
-                    for slot in dynamic_slots:
-                        vars_list = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day and k[4] == slot]
-                        if vars_list: model.AddAtMostOne(vars_list)
+                                    key = (fac_id, sub_id, r_id, day, slot, b_id)
+                                    var = model.NewBoolVar(f"x_{key}")
+                                    x[key] = var
+                                    
+                                    fac_day_slot[(fac_id, day, slot)].append(var)
+                                    room_day_slot[(r_id, day, slot)].append(var)
+                                    batch_day_slot[(b_id, day, slot)].append(var)
+                                    batch_subject[(b_id, sub_id)].append(var)
+                                    fac_weekly[fac_id].append(var)
+                                    fac_day[(fac_id, day)].append(var)
+                                    batch_day_sub[(b_id, day, sub_id)].append(var)
+                                    batch_day_slot_sub[(b_id, day, slot, sub_id)].append(var)
+                                    batch_day_slot_room[(b_id, day, slot, r_id)].append(var)
 
-            for room in rooms:
-                for day in DAYS:
-                    for slot in dynamic_slots:
-                        vars_list = [x[k] for k in x if k[2] == room["id"] and k[3] == day and k[4] == slot]
-                        if vars_list: model.AddAtMostOne(vars_list)
+            # --- 4B. HARD CONFLICTS ---
+            for vars_list in fac_day_slot.values():
+                if len(vars_list) > 1: model.AddAtMostOne(vars_list)
+            for vars_list in room_day_slot.values():
+                if len(vars_list) > 1: model.AddAtMostOne(vars_list)
+            for vars_list in batch_day_slot.values():
+                if len(vars_list) > 1: model.AddAtMostOne(vars_list)
 
-            for batch in batches:
-                for day in DAYS:
-                    for slot in dynamic_slots:
-                        vars_list = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot]
-                        if vars_list: model.AddAtMostOne(vars_list)
+            for fac_id, vars_list in fac_weekly.items():
+                max_hrs = next((f["max_weekly_hours"] for f in faculties if f["id"] == fac_id), 40)
+                if vars_list: model.Add(sum(vars_list) <= max_hrs)
 
-            # --- HARD CONSTRAINTS (Sessions & Spread) ---
+            # --- 4C. SESSIONS & LAB STACKING ---
             for batch in batches:
                 for subject in subjects:
+                    sub_id = subject["id"]
+                    b_id = batch["id"]
                     req = subject["required_sessions"]
-                    sub_vars = [x[k] for k in x if k[1] == subject["id"] and k[5] == batch["id"]]
+                    
+                    sub_vars = batch_subject.get((b_id, sub_id), [])
                     
                     if subject["subject_type"] == "Practical":
-                        
                         block_vars = []
                         for fac in faculties:
-                            if (fac["id"], subject["id"]) not in exp_map: continue
-                            # USE NEW TUPLE KEY HERE
-                            for room in eligible_rooms[(subject["id"], batch["id"])]:
+                            if (fac["id"], sub_id) not in exp_map: continue
+                            for room in eligible_rooms.get((sub_id, b_id), []):
                                 for day in DAYS:
                                     for i in range(len(dynamic_slots) - req + 1):
                                         if slot_hours[i + req - 1] - slot_hours[i] != req - 1: continue 
-                                        block_var = model.NewBoolVar(f"blk_{batch['id']}_{subject['id']}_{fac['id']}_{room['id']}_{day}_{i}")
-                                        block_vars.append(block_var)
+                                        
+                                        valid_block = True
+                                        block_sub_vars = []
                                         for j in range(req):
-                                            var_k = (fac["id"], subject["id"], room["id"], day, dynamic_slots[i+j], batch["id"])
-                                            if var_k in x: model.AddImplication(block_var, x[var_k])
-                                            
-                                                    
+                                            var_k = (fac["id"], sub_id, room["id"], day, dynamic_slots[i+j], b_id)
+                                            if var_k in x: block_sub_vars.append(x[var_k])
+                                            else: valid_block = False; break
+                                                
+                                        if valid_block:
+                                            block_var = model.NewBoolVar(f"blk_{b_id}_{sub_id}_{fac['id']}_{room['id']}_{day}_{i}")
+                                            block_vars.append(block_var)
+                                            for var in block_sub_vars:
+                                                model.AddImplication(block_var, var)
+                                                
                         if block_vars: model.AddExactlyOne(block_vars)
                         if sub_vars: model.Add(sum(sub_vars) == req)
                     else:
-                        if sub_vars: model.Add(sum(sub_vars) == req)
+                       # =====================================================
+                        # FIX B: PREVENT CONSECUTIVE SAME-SUBJECT STACKING
+                        # =====================================================
+                        # The engine can schedule this subject multiple times a day, 
+                        # but NEVER back-to-back in consecutive slots.
                         for day in DAYS:
-                            day_vars = [x[k] for k in x if k[1] == subject["id"] and k[5] == batch["id"] and k[3] == day]
-                            if day_vars: model.Add(sum(day_vars) <= 1)
-
-            for faculty in faculties:
-                vars_list = [x[k] for k in x if k[0] == faculty["id"]]
-                if vars_list: model.Add(sum(vars_list) <= faculty["max_weekly_hours"])
-
-            # Lock Existing Schedules
+                            for i in range(len(dynamic_slots) - 1):
+                                slot1 = dynamic_slots[i]
+                                slot2 = dynamic_slots[i+1]
+                                
+                                # Get the variables for this subject at slot t and t+1
+                                s1_vars = batch_day_slot_sub.get((b_id, day, slot1, sub_id), [])
+                                s2_vars = batch_day_slot_sub.get((b_id, day, slot2, sub_id), [])
+                                
+                                if s1_vars and s2_vars:
+                                    # Hard rule: The sum of these two consecutive slots cannot exceed 1
+                                    model.Add(sum(s1_vars) + sum(s2_vars) <= 1)
+            # --- 4D. DATABASE LOCK ---
             for booking in existing_bookings:
-                fac_vars = [x[k] for k in x if k[0] == booking["faculty_id"] and k[3] == booking["day_of_week"] and k[4] == booking["timeslot"]]
-                if fac_vars: model.Add(sum(fac_vars) == 0)
-                rm_vars = [x[k] for k in x if k[2] == booking["room_id"] and k[3] == booking["day_of_week"] and k[4] == booking["timeslot"]]
-                if rm_vars: model.Add(sum(rm_vars) == 0)
+                d, t = booking["day_of_week"], booking["timeslot"]
+                for var in fac_day_slot.get((booking["faculty_id"], d, t), []): model.Add(var == 0)
+                for var in room_day_slot.get((booking["room_id"], d, t), []): model.Add(var == 0)
 
-            # --- DYNAMIC UI CONSTRAINTS ---
+            # --- 4E. DYNAMIC UI CONSTRAINTS ---
             if "no_consecutive" in payload.constraints:
                 for batch in batches:
+                    b_id = batch["id"]
                     for day in DAYS:
                         for subject in subjects:
                             if subject["subject_type"] == "Practical": continue
+                            sub_id = subject["id"]
                             for i in range(len(dynamic_slots) - 1):
-                                vars_s1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == dynamic_slots[i] and k[1] == subject["id"]]
-                                vars_s2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == dynamic_slots[i+1] and k[1] == subject["id"]]
+                                vars_s1 = batch_day_slot_sub.get((b_id, day, dynamic_slots[i], sub_id), [])
+                                vars_s2 = batch_day_slot_sub.get((b_id, day, dynamic_slots[i+1], sub_id), [])
                                 if vars_s1 and vars_s2: model.Add(sum(vars_s1) + sum(vars_s2) <= 1)
 
             if "strict_faculty_load" in payload.constraints:
                 for faculty in faculties:
+                    # Dynamically calculate a healthy daily limit for THIS specific professor
+                    max_fac_daily = math.ceil(faculty["max_weekly_hours"] / len(DAYS)) + 1
+                    
                     for day in DAYS:
-                        vars_day = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day]
-                        if vars_day: model.Add(sum(vars_day) <= 2)
-
-            # if "faculty_day_off" in payload.constraints:
-            #     for faculty in faculties:
-            #         worked_days = []
-            #         for day in DAYS:
-            #             vars_day = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day]
-            #             if vars_day:
-            #                 worked_day_var = model.NewBoolVar(f"wk_{faculty['id']}_{day}")
-            #                 model.AddMaxEquality(worked_day_var, vars_day)
-            #                 worked_days.append(worked_day_var)
-            #         if worked_days: model.Add(sum(worked_days) <= len(DAYS) - 1)
-
-            # --- OBJECTIVE SCORING (Uses dynamic weights from loop) ---
-            objective_terms = []
-            for key, var in x.items():
-                score = int(exp_map[(key[0], key[1])] * scenario["w_exp"])
-                # if "morning_heavy" in payload.constraints:
-                #     if "AM" in key[4]: score += (3 * scenario["w_morn"])
-                objective_terms.append(var * score)
-                
-            for batch in batches:
-                for day in DAYS:
-                    for i in range(len(dynamic_slots) - 1):
-                        if slot_hours[i+1] - slot_hours[i] != 1: continue 
-                        for room in rooms:
-                            b_r_s1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == dynamic_slots[i] and k[2] == room["id"]]
-                            b_r_s2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == dynamic_slots[i+1] and k[2] == room["id"]]
-                            if b_r_s1 and b_r_s2:
-                                b_in_r1 = model.NewBoolVar(f"r1_{batch['id']}_{room['id']}_{day}_{i}")
-                                b_in_r2 = model.NewBoolVar(f"r2_{batch['id']}_{room['id']}_{day}_{i+1}")
-                                same_rm = model.NewBoolVar(f"srm_{batch['id']}_{room['id']}_{day}_{i}")
-                                model.Add(b_in_r1 == sum(b_r_s1))
-                                model.Add(b_in_r2 == sum(b_r_s2))
-                                model.AddBoolAnd([b_in_r1, b_in_r2]).OnlyEnforceIf(same_rm)
-                                objective_terms.append(same_rm * scenario["w_room"])
-            # --- NEW: OBJECTIVE SCORING ---
+                        vars_day = fac_day.get((faculty["id"], day), [])
+                        if vars_day: 
+                            model.Add(sum(vars_day) <= max_fac_daily)
+            # --- 4F. OBJECTIVE SCORING & GAP MINIMIZERS ---
             objective_terms = []
             for key, var in x.items():
                 score = int(exp_map[(key[0], key[1])] * scenario["w_exp"])
                 objective_terms.append(var * score)
                 
             for batch in batches:
+                b_id = batch["id"]
                 for day in DAYS:
                     for i in range(len(dynamic_slots) - 1):
                         if slot_hours[i+1] - slot_hours[i] != 1: continue 
                         for room in rooms:
-                            b_r_s1 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == dynamic_slots[i] and k[2] == room["id"]]
-                            b_r_s2 = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == dynamic_slots[i+1] and k[2] == room["id"]]
+                            r_id = room["id"]
+                            b_r_s1 = batch_day_slot_room.get((b_id, day, dynamic_slots[i], r_id), [])
+                            b_r_s2 = batch_day_slot_room.get((b_id, day, dynamic_slots[i+1], r_id), [])
                             if b_r_s1 and b_r_s2:
-                                b_in_r1 = model.NewBoolVar(f"r1_{batch['id']}_{room['id']}_{day}_{i}")
-                                b_in_r2 = model.NewBoolVar(f"r2_{batch['id']}_{room['id']}_{day}_{i+1}")
-                                same_rm = model.NewBoolVar(f"srm_{batch['id']}_{room['id']}_{day}_{i}")
+                                b_in_r1 = model.NewBoolVar(f"r1_{b_id}_{r_id}_{day}_{i}")
+                                b_in_r2 = model.NewBoolVar(f"r2_{b_id}_{r_id}_{day}_{i+1}")
+                                same_rm = model.NewBoolVar(f"srm_{b_id}_{r_id}_{day}_{i}")
                                 model.Add(b_in_r1 == sum(b_r_s1))
                                 model.Add(b_in_r2 == sum(b_r_s2))
                                 model.AddBoolAnd([b_in_r1, b_in_r2]).OnlyEnforceIf(same_rm)
                                 objective_terms.append(same_rm * scenario["w_room"])
 
-            # =====================================================
-            # NEW: GAP MINIMIZATION (SWISS CHEESE PREVENTION)
-            # =====================================================
-            
-            # 1. MINIMIZE STUDENT GAPS
             if "minimize_student_gaps" in payload.constraints:
                 for batch in batches:
+                    b_id = batch["id"]
                     for day in DAYS:
                         y = []
                         for i, slot in enumerate(dynamic_slots):
-                            slot_vars = [x[k] for k in x if k[5] == batch["id"] and k[3] == day and k[4] == slot]
-                            is_active = model.NewBoolVar(f"b_act_{batch['id']}_{day}_{i}")
+                            slot_vars = batch_day_slot.get((b_id, day, slot), [])
+                            is_active = model.NewBoolVar(f"b_act_{b_id}_{day}_{i}")
                             if slot_vars: model.Add(is_active == sum(slot_vars))
                             else: model.Add(is_active == 0)
                             y.append(is_active)
                             
                         for i in range(1, len(dynamic_slots) - 1):
-                            has_before = model.NewBoolVar(f"hb_{batch['id']}_{day}_{i}")
-                            has_after = model.NewBoolVar(f"ha_{batch['id']}_{day}_{i}")
-                            is_gap = model.NewBoolVar(f"gap_{batch['id']}_{day}_{i}")
+                            has_before = model.NewBoolVar(f"hb_{b_id}_{day}_{i}")
+                            has_after = model.NewBoolVar(f"ha_{b_id}_{day}_{i}")
+                            is_gap = model.NewBoolVar(f"gap_{b_id}_{day}_{i}")
                             
                             model.Add(sum(y[:i]) >= 1).OnlyEnforceIf(has_before)
                             model.Add(sum(y[:i]) == 0).OnlyEnforceIf(has_before.Not())
@@ -1030,24 +1272,24 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                             model.Add(sum(y[i+1:]) == 0).OnlyEnforceIf(has_after.Not())
                             
                             model.AddBoolOr([y[i], has_before.Not(), has_after.Not(), is_gap])
-                            objective_terms.append(is_gap * -30) # Massive penalty for student gaps
+                            objective_terms.append(is_gap * -30)
 
-            # 2. MINIMIZE FACULTY GAPS
             if "minimize_faculty_gaps" in payload.constraints:
                 for faculty in faculties:
+                    fac_id = faculty["id"]
                     for day in DAYS:
                         y = []
                         for i, slot in enumerate(dynamic_slots):
-                            slot_vars = [x[k] for k in x if k[0] == faculty["id"] and k[3] == day and k[4] == slot]
-                            is_active = model.NewBoolVar(f"f_act_{faculty['id']}_{day}_{i}")
+                            slot_vars = fac_day_slot.get((fac_id, day, slot), [])
+                            is_active = model.NewBoolVar(f"f_act_{fac_id}_{day}_{i}")
                             if slot_vars: model.Add(is_active == sum(slot_vars))
                             else: model.Add(is_active == 0)
                             y.append(is_active)
                             
                         for i in range(1, len(dynamic_slots) - 1):
-                            has_before = model.NewBoolVar(f"fhb_{faculty['id']}_{day}_{i}")
-                            has_after = model.NewBoolVar(f"fha_{faculty['id']}_{day}_{i}")
-                            is_gap = model.NewBoolVar(f"fgap_{faculty['id']}_{day}_{i}")
+                            has_before = model.NewBoolVar(f"fhb_{fac_id}_{day}_{i}")
+                            has_after = model.NewBoolVar(f"fha_{fac_id}_{day}_{i}")
+                            is_gap = model.NewBoolVar(f"fgap_{fac_id}_{day}_{i}")
                             
                             model.Add(sum(y[:i]) >= 1).OnlyEnforceIf(has_before)
                             model.Add(sum(y[:i]) == 0).OnlyEnforceIf(has_before.Not())
@@ -1055,50 +1297,164 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                             model.Add(sum(y[i+1:]) == 0).OnlyEnforceIf(has_after.Not())
                             
                             model.AddBoolOr([y[i], has_before.Not(), has_after.Not(), is_gap])
-                            objective_terms.append(is_gap * -30) # Massive penalty for faculty gaps
+                            objective_terms.append(is_gap * -30)
+                            
+                            
+            # --- 4G. ENTERPRISE SOLUTION BANNING (FORCE DIVERGENCE) ---
+            # If the engine already generated Option 1, we force it to change 
+            # at least 15% of the schedule for Option 2 and Option 3!
+            for prev_keys in previous_solution_keys:
+                matching_vars = [x[k] for k in prev_keys if k in x]
+                if matching_vars:
+                    classes_to_move = max(2, len(matching_vars) // 6) # Force ~15% difference
+                    model.Add(sum(matching_vars) <= len(matching_vars) - classes_to_move)
+                    
+           # =====================================================
+            # FIX: DYNAMIC DAILY WORKLOAD LIMITS
+            # =====================================================
+            for batch in batches:
+                b_id = batch["id"]
+                
+                # Dynamically calculate the maximum daily hours based on THIS batch's actual workload
+                weekly_load = sum(s["required_sessions"] for s in subjects if s["semester"] == batch["semester"])
+                # e.g., 25 hours / 5 days = 5. Add 1 hour buffer = 6 hours max per day.
+                max_daily = math.ceil(weekly_load / len(DAYS)) + 1 
+                
+                for day in DAYS:
+                    day_vars = []
+                    for slot in dynamic_slots:
+                        day_vars.extend(batch_day_slot.get((b_id, day, slot), []))
+                    
+                    if not day_vars: continue
+                    
+                    is_active_day = model.NewBoolVar(f"act_day_{b_id}_{day}")
+                    
+                    model.Add(sum(day_vars) > 0).OnlyEnforceIf(is_active_day)
+                    model.Add(sum(day_vars) == 0).OnlyEnforceIf(is_active_day.Not())
+                    
+                    # THE NEW RULE: Minimum 2 hours, Maximum scales dynamically!
+                    model.Add(sum(day_vars) >= 2).OnlyEnforceIf(is_active_day)
+                    model.Add(sum(day_vars) <= max_daily).OnlyEnforceIf(is_active_day)
+
+
+            # =====================================================
+            # NEW: 2. STANDARDIZED ANCHOR PENALTY (START AT 8/9 AM)
+            # =====================================================
+            # Identifies the 8 AM and 9 AM slots dynamically
+            anchor_slots = [dynamic_slots[i] for i, h in enumerate(slot_hours) if h in [8, 9]]
+            
+            for batch in batches:
+                b_id = batch["id"]
+                for day in DAYS:
+                    day_vars = []
+                    for slot in dynamic_slots:
+                        day_vars.extend(batch_day_slot.get((b_id, day, slot), []))
+                    
+                    if not day_vars: continue
+                    
+                    is_active_day = model.NewBoolVar(f"anc_act_{b_id}_{day}")
+                    model.Add(sum(day_vars) > 0).OnlyEnforceIf(is_active_day)
+                    model.Add(sum(day_vars) == 0).OnlyEnforceIf(is_active_day.Not())
+                    
+                    # Check if 8 AM or 9 AM slots are used
+                    early_vars = []
+                    for a_slot in anchor_slots:
+                        early_vars.extend(batch_day_slot.get((b_id, day, a_slot), []))
+                        
+                    has_early = model.NewBoolVar(f"has_early_{b_id}_{day}")
+                    if early_vars:
+                        model.Add(sum(early_vars) > 0).OnlyEnforceIf(has_early)
+                        model.Add(sum(early_vars) == 0).OnlyEnforceIf(has_early.Not())
+                    else:
+                        model.Add(has_early == 0)
+                        
+                    # If the day is active but NO early class exists, apply a massive penalty
+                    bad_anchor = model.NewBoolVar(f"bad_anchor_{b_id}_{day}")
+                    model.AddBoolAnd([is_active_day, has_early.Not()]).OnlyEnforceIf(bad_anchor)
+                    model.AddBoolOr([is_active_day.Not(), has_early]).OnlyEnforceIf(bad_anchor.Not())
+                    
+                    # Massive -50 point penalty for starting the day late
+                    objective_terms.append(bad_anchor * -50)
+
             model.Maximize(sum(objective_terms))
 
-            # --- SOLVE ---
+            # --- 4G. SOLVE (WITH RANDOMIZED DIVERGENCE) ---
             solver = cp_model.CpSolver()
-            solver.parameters.max_time_in_seconds = 7 # 7 seconds per option (21s total)
+            
+            # Reduce to 3 seconds per option so the browser doesn't time out (9s total limit)
+            solver.parameters.max_time_in_seconds = 5
+            
+            # THE ENTERPRISE FIX: Force the math engine to explore completely different 
+            # mathematical branches for each scenario so you get 3 UNIQUE options!
+            if "Balanced" in scenario["name"]:
+                solver.parameters.random_seed = 1
+            elif "Movement" in scenario["name"]:
+                solver.parameters.random_seed = 42
+            else:
+                solver.parameters.random_seed = 999
+
             status = solver.Solve(model)
 
             if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
                 draft_records = []
+                current_solution_keys = [] # <-- NEW: Track this specific run
+                
                 for key, var in x.items():
                     if solver.Value(var) == 1:
+                        current_solution_keys.append(key) # <-- NEW: Save the boolean key
                         draft_records.append({
                             "department_id": department_id, "faculty_id": key[0], "subject_id": key[1],
                             "room_id": key[2], "day_of_week": key[3], "timeslot": key[4], "batch_id": key[5],
                             "faculty": fac_dict[key[0]], "subject": sub_dict[key[1]], "room": room_dict[key[2]], "batch": batch_dict[key[5]]
                         })
-                generated_options.append({
-                    "option_name": scenario["name"],
-                    "records": draft_records
-                })
+                        
+                previous_solution_keys.append(current_solution_keys) # <-- NEW: Add to ban list for next loop!
+                generated_options.append({"option_name": scenario["name"], "records": draft_records})
 
-        # If at least one option succeeded
         if generated_options:
             return {
                 "success": True, 
                 "message": f"Successfully generated {len(generated_options)} optimization options!",
-                "draft_options": generated_options # Return all 3 options
+                "draft_options": generated_options 
             }
         else:
-            return {"success": False, "message": "No feasible timetable found under these constraints"}       
+            return {"success": False, "message": "The math is too tight! No feasible timetable could be found under these strict constraints."}       
          
-        
     except Exception as e:
         print("--- SCHEDULER ENGINE CRASHED ---")
-        print(e)
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
-    # 3. Add the finally block at the VERY END to release the connection
     finally:
         cursor.close()
         release_db_connection(conn)
-
 # CHANGE:safe timetable saving with transaction and batch deletion/insertion    
+
+# =========================================================
+# two new, extremely fast API routes. One to start the job, and one to check its status.
+# =========================================================
+
+@app.post("/generate-timetable/{department_id}")
+def dispatch_timetable_generation(department_id: int, payload: GenerateRequest):
+    # Send the heavy math to the background worker instantly
+    task = generate_timetable_task.delay(department_id, payload.model_dump())
+    
+    # Return immediately to the UI so the browser doesn't freeze!
+    return {"success": True, "task_id": task.id, "message": "Generation started in background."}
+
+@app.get("/task-status/{task_id}")
+def get_task_status(task_id: str):
+    task_result = AsyncResult(task_id, app=celery_app)
+    
+    if task_result.state == 'PENDING':
+        return {"state": task_result.state, "message": "Waiting in queue..."}
+    elif task_result.state == 'PROGRESS':
+        return {"state": task_result.state, "message": task_result.info.get('message', '')}
+    elif task_result.state == 'SUCCESS':
+        return {"state": task_result.state, "result": task_result.result}
+    else:
+        return {"state": task_result.state, "message": str(task_result.info)}
     
 @app.post("/save-timetable/")
 def save_timetable(payload: SaveTimetableRequest):
@@ -1135,6 +1491,40 @@ def save_timetable(payload: SaveTimetableRequest):
     finally:
         cursor.close()
         release_db_connection(conn)   
+        
+        
+# =========================================================
+# TIMETABLE SWAP VALIDATION
+# =========================================================
+        
+        
+@app.post("/validate-swap/")
+def validate_timetable_swap(payload: SwapValidationRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Check 1: Is the Faculty already teaching another batch at this new time?
+        cursor.execute("""
+            SELECT id FROM timetables 
+            WHERE faculty_id = %s AND day_of_week = %s AND timeslot = %s
+        """, (payload.faculty_id, payload.new_day, payload.new_timeslot))
+        if cursor.fetchone():
+            return {"valid": False, "message": "Conflict: This Professor is already teaching another class at this time."}
+
+        # Check 2: Is the Room already occupied by another batch?
+        cursor.execute("""
+            SELECT id FROM timetables 
+            WHERE room_id = %s AND day_of_week = %s AND timeslot = %s
+        """, (payload.room_id, payload.new_day, payload.new_timeslot))
+        if cursor.fetchone():
+            return {"valid": False, "message": "Conflict: This Room is already booked by another class at this time."}
+
+        # If it passes all checks, the move is legal!
+        return {"valid": True, "message": "Move is valid!"}
+        
+    finally:
+        cursor.close()
+        release_db_connection(conn)
 
 
 # =========================================================
@@ -1208,6 +1598,115 @@ def delete_timetable(batch_id: int):
         return {"success": True, "message": "Timetable securely deleted."}
     except Exception as e:
         conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+        # =========================================================
+# GLOBAL ANALYTICS DASHBOARD API (WHOLE UNIVERSITY)
+# =========================================================
+@app.get("/dashboard-stats/global")
+def get_global_dashboard_stats():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # 1. Total Faculty (Campus-wide)
+        cursor.execute("SELECT COUNT(*) as count FROM faculties")
+        fac_count = cursor.fetchone()["count"]
+
+        # 2. Active Batches (Campus-wide)
+        cursor.execute("SELECT COUNT(*) as count FROM batches")
+        batch_count = cursor.fetchone()["count"]
+
+        # 3. Room Utilization (Campus-wide)
+        cursor.execute("SELECT COUNT(*) as count FROM rooms WHERE is_active = TRUE")
+        room_count = cursor.fetchone()["count"]
+        total_possible_slots = room_count * 35 
+        
+        cursor.execute("SELECT COUNT(*) as count FROM timetables")
+        booked_slots = cursor.fetchone()["count"]
+        utilization = round((booked_slots / total_possible_slots) * 100) if total_possible_slots > 0 else 0
+
+        # 4. Faculty Workload Distribution (Top 20 Busiest across University)
+        cursor.execute("""
+            SELECT f.name, COUNT(t.id) as assigned_hours, f.max_weekly_hours 
+            FROM faculties f
+            LEFT JOIN timetables t ON f.id = t.faculty_id
+            GROUP BY f.id, f.name, f.max_weekly_hours
+            ORDER BY assigned_hours DESC
+            LIMIT 20
+        """)
+        faculty_load = cursor.fetchall()
+
+        # =========================================================
+        # 5. AI RECOMMENDATION ENGINE (GLOBAL SCALED)
+        # =========================================================
+        recommendations = []
+
+        # Insight A: Global Room Utilization
+        if utilization > 85:
+            recommendations.append({
+                "type": "error", "icon": "domain_disabled", "title": "Critical Room Shortage", 
+                "message": f"Campus-wide room utilization is at {utilization}%. The scheduler will likely fail for new batches. Consider adding new rooms."
+            })
+        elif utilization < 40 and total_possible_slots > 0:
+            recommendations.append({
+                "type": "info", "icon": "energy_savings_leaf", "title": "Low Room Utilization", 
+                "message": f"Campus room utilization is only {utilization}%. Consider consolidating classes into fewer buildings to save operational costs."
+            })
+
+        # Insight B: Faculty Burnout Risk across Uni
+        overworked = [f["name"] for f in faculty_load if f["max_weekly_hours"] > 0 and (f["assigned_hours"] / f["max_weekly_hours"]) >= 0.9]
+        if overworked:
+            names = ", ".join(overworked[:2]).replace("Faculty_", "Prof. ") + ("..." if len(overworked) > 2 else "")
+            recommendations.append({
+                "type": "warning", "icon": "psychology", "title": "Faculty Burnout Risk", 
+                "message": f"{names} are operating at or above 90% of their maximum contract capacity. Consider reassigning classes."
+            })
+
+        # Insight C: Unscheduled Batches across all departments
+        cursor.execute("""
+            SELECT b.name FROM batches b 
+            LEFT JOIN timetables t ON b.id = t.batch_id 
+            GROUP BY b.id, b.name HAVING COUNT(t.id) = 0
+        """)
+        unscheduled = cursor.fetchall()
+        if unscheduled:
+            recommendations.append({
+                "type": "action", "icon": "calendar_month", "title": "Unscheduled Batches Detected", 
+                "message": f"{len(unscheduled)} batches (including {unscheduled[0]['name']}) currently have no published timetables."
+            })
+
+        # Insight D: Unmapped Subjects globally
+        cursor.execute("""
+            SELECT s.name FROM subjects s 
+            LEFT JOIN faculty_expertise fe ON s.id = fe.subject_id 
+            GROUP BY s.id, s.name HAVING COUNT(fe.faculty_id) = 0
+        """)
+        unmapped = cursor.fetchall()
+        if unmapped:
+            recommendations.append({
+                "type": "error", "icon": "menu_book", "title": "Unassigned Subjects", 
+                "message": f"{len(unmapped)} subjects lack faculty expertise mappings. The engine will crash until a professor is mapped to them."
+            })
+
+        # Fallback: If everything is perfect
+        if not recommendations:
+            recommendations.append({
+                "type": "success", "icon": "auto_awesome", "title": "University Optimized", 
+                "message": "All university parameters are within healthy thresholds. No immediate administrative actions required."
+            })
+
+        return {
+            "success": True,
+            "total_faculty": fac_count,
+            "active_batches": batch_count,
+            "room_utilization": utilization,
+            "faculty_load": faculty_load,
+            "recommendations": recommendations 
+        }
+        
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cursor.close()
