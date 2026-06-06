@@ -738,36 +738,35 @@
       });
            
     
-                async function startGeneration() {
-              // 1. Show the full-screen loading spinner immediately
-              document.getElementById("loadingOverlay").classList.remove("hidden");
-              document.getElementById("loadingMessage").innerText = "Crunching the numbers. This may take up to 10 seconds...";
+                  async function startGeneration() {
+                      document.getElementById("loadingOverlay").classList.remove("hidden");
+                      document.getElementById("loadingMessage").innerText = "Crunching the numbers. This may take up to 10 seconds...";
 
-              try {
-                  // 2. Send the request to FastAPI and WAIT for it to finish
-                  const response = await fetch(`${API_URL}/generate-timetable/${CURRENT_DEPT_ID}`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(requestData)
-                  });
-                  
-                  const data = await response.json();
+                      try {
+                          const response = await fetch(`${API_URL}/generate-timetable/${CURRENT_DEPT_ID}`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(requestData)
+                          });
+                          
+                          const data = await response.json();
+                          document.getElementById("loadingOverlay").classList.add("hidden");
 
-                  // 3. The math is done! Hide the spinner and show the results
-                  document.getElementById("loadingOverlay").classList.add("hidden");
-
-                  if (data.success) {
-                      // Render the options to the screen!
-                      renderDraftOptions(data.draft_options);
-                  } else {
-                      alert("Engine Failed: " + data.message);
+                          if (data.success) {
+                              // Success! Slide in a green toast and render data.
+                              SmartAlert("success", "Timetables Generated", data.message);
+                              renderDraftOptions(data.draft_options);
+                          } else {
+                              // Math Error! Slide in a red toast detailing the capacity issue.
+                              SmartAlert("error", "Optimization Failed", data.message);
+                          }
+                          
+                      } catch (error) {
+                          document.getElementById("loadingOverlay").classList.add("hidden");
+                          // Server crash alert
+                          SmartAlert("error", "Server Error", "Backend is unreachable. Please ensure Python is running.");
+                      }
                   }
-                  
-              } catch (error) {
-                  document.getElementById("loadingOverlay").classList.add("hidden");
-                  alert("Server Error: Make sure your Python backend is running!");
-              }
-          }
     </script>
   </body>
 </html>

@@ -587,15 +587,15 @@
           statusMsg.classList.add("hidden");
 
           const mentorVal = document.getElementById("batchMentor").value;
+
+          // FIX: Changed 'editBatch...' to 'batch...'
           const batchData = {
             department_id: CURRENT_DEPT_ID,
-            name: document.getElementById("editBatchName").value,
+            name: document.getElementById("batchName").value,
             student_count: parseInt(
-              document.getElementById("editBatchStudentCount").value,
+              document.getElementById("batchStudentCount").value,
             ),
-            semester: parseInt(
-              document.getElementById("editBatchSemester").value,
-            ), // <-- NEW
+            semester: parseInt(document.getElementById("batchSemester").value),
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
@@ -609,23 +609,22 @@
             const result = await response.json();
 
             if (response.ok) {
-              statusMsg.className =
-                "mt-4 font-label-md text-tertiary-container";
-              statusMsg.innerText = "✅ Batch saved successfully!";
+              SmartAlert("success", "Batch Added", "Batch saved successfully!");
               document.getElementById("newBatchForm").reset();
               fetchBatches();
-              setTimeout(closeAddModal, 1000);
+              setTimeout(closeAddModal, 500);
             } else {
-              statusMsg.className = "mt-4 font-label-md text-error";
-              statusMsg.innerText = "⚠️ " + result.detail;
+              // FIX: Safely parse FastAPI 422 array errors to prevent [object Object]
+              let errorMsg = result.detail || result.message;
+              if (Array.isArray(errorMsg))
+                errorMsg = "Please check your inputs. A field is invalid.";
+              SmartAlert("error", "Failed to Add", errorMsg);
             }
           } catch (error) {
-            statusMsg.className = "mt-4 font-label-md text-error";
-            statusMsg.innerText = "❌ Server offline.";
+            SmartAlert("error", "Network Error", "Server is offline.");
           } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">save</span> Save Batch`;
-            statusMsg.classList.remove("hidden");
           }
         });
 
@@ -636,10 +635,9 @@
 
         document.getElementById("editBatchName").value = batch.name;
         document.getElementById("editBatchSemester").value =
-          batch.semester || 1; // <-- NEW
+          batch.semester || 1;
         document.getElementById("editBatchStudentCount").value =
           batch.student_count;
-
         document.getElementById("editBatchMentor").value =
           batch.mentor_id || "";
 
@@ -664,13 +662,17 @@
           statusMsg.classList.add("hidden");
 
           const mentorVal = document.getElementById("editBatchMentor").value;
+
+          // FIX: Changed 'batch...' to 'editBatch...'
           const batchData = {
             department_id: CURRENT_DEPT_ID,
-            name: document.getElementById("batchName").value,
+            name: document.getElementById("editBatchName").value,
             student_count: parseInt(
-              document.getElementById("batchStudentCount").value,
+              document.getElementById("editBatchStudentCount").value,
             ),
-            semester: parseInt(document.getElementById("batchSemester").value), // <-- NEW
+            semester: parseInt(
+              document.getElementById("editBatchSemester").value,
+            ),
             mentor_id: mentorVal ? parseInt(mentorVal) : null,
           };
 
@@ -686,42 +688,64 @@
             const result = await response.json();
 
             if (response.ok) {
+              SmartAlert(
+                "success",
+                "Batch Updated",
+                "Changes saved successfully.",
+              );
               fetchBatches();
               closeEditModal();
             } else {
-              statusMsg.className = "mt-4 font-label-md text-error";
-              statusMsg.innerText = "⚠️ " + result.detail;
+              // FIX: Safely parse FastAPI 422 array errors
+              let errorMsg = result.detail || result.message;
+              if (Array.isArray(errorMsg))
+                errorMsg = "Please check your inputs. A field is invalid.";
+              SmartAlert("error", "Update Failed", errorMsg);
             }
           } catch (error) {
-            statusMsg.className = "mt-4 font-label-md text-error";
-            statusMsg.innerText = "❌ Server offline.";
+            SmartAlert("error", "Network Error", "Server is offline.");
           } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">update</span> Update`;
-            statusMsg.classList.remove("hidden");
           }
         });
-
       // --- 6. DELETE & MODAL CONTROLS (Unchanged) ---
+      // --- 6. DELETE & MODAL CONTROLS ---
       document
         .getElementById("deleteBatchBtn")
         .addEventListener("click", async () => {
           const batchName = globalBatchesData[currentlyEditingBatchId].name;
-          if (!confirm(`Delete ${batchName}?`)) return;
+
+          const confirmed = await SmartConfirm(
+            "Delete Batch?",
+            `Are you sure you want to delete ${batchName}? All timetables for this batch will be removed.`,
+            "danger",
+          );
+          if (!confirmed) return;
+
           try {
             const response = await fetch(
               `${API_URL}/delete-batch/${currentlyEditingBatchId}`,
               { method: "DELETE" },
             );
             if (response.ok) {
+              SmartAlert(
+                "success",
+                "Batch Deleted",
+                `${batchName} has been removed.`,
+              );
               fetchBatches();
               closeEditModal();
             } else {
               const res = await response.json();
-              alert("Error: " + (res.detail || res.message));
+              SmartAlert("error", "Deletion Failed", res.detail || res.message);
             }
           } catch (error) {
-            alert("Failed to connect to backend.");
+            SmartAlert(
+              "error",
+              "Network Error",
+              "Failed to connect to backend.",
+            );
           }
         });
 

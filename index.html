@@ -457,14 +457,33 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <section class="lg:col-span-2 space-y-4 md:space-y-6">
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-secondary"
-                >bar_chart</span
-              >
-              <h3 class="font-headline-md text-xl md:text-2xl text-primary">
-                Faculty Workload Distribution
-              </h3>
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-secondary"
+                  >bar_chart</span
+                >
+                <h3 class="font-headline-md text-xl md:text-2xl text-primary">
+                  Faculty Workload Distribution
+                </h3>
+              </div>
+
+              <!-- NEW: Chart Filter Dropdown -->
+              <div class="relative w-full sm:w-48">
+                <select
+                  id="chartDeptFilter"
+                  class="w-full bg-white hand-drawn-border-sm p-2 text-label-md focus:outline-none appearance-none pr-8 cursor-pointer"
+                >
+                  <option value="all">All Departments</option>
+                </select>
+                <span
+                  class="material-symbols-outlined absolute right-2 top-2 pointer-events-none text-on-surface-variant"
+                  >expand_more</span
+                >
+              </div>
             </div>
+
             <div
               class="bg-white hand-drawn-border-sm offset-shadow-sm p-4 md:p-6"
             >
@@ -499,10 +518,25 @@
     <script>
       const API_URL = "http://127.0.0.1:8000";
       let workloadChart = null;
+      let globalFacultyLoadData = [];
 
       document.addEventListener("DOMContentLoaded", async () => {
         await fetchGlobalDashboardData();
+        await loadDepartmentsForChart();
       });
+
+      async function loadDepartmentsForChart() {
+        try {
+          const res = await fetch(`${API_URL}/get-departments/`);
+          const data = await res.json();
+          const filter = document.getElementById("chartDeptFilter");
+          data.data.forEach((dept) => {
+            filter.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+          });
+        } catch (e) {
+          console.error("Failed to load departments for chart");
+        }
+      }
 
       async function fetchGlobalDashboardData() {
         try {
@@ -572,13 +606,30 @@
               data.predictive.room_shortage;
 
             // 4. Render Chart & Recommendations
-            renderChart(data.faculty_load);
+            globalFacultyLoadData = data.faculty_load;
+            renderChart(globalFacultyLoadData);
             renderRecommendations(data.recommendations);
           }
         } catch (e) {
           console.error("Dashboard error:", e);
         }
       }
+
+      document
+        .getElementById("chartDeptFilter")
+        .addEventListener("change", (e) => {
+          const selectedDeptId = e.target.value;
+
+          if (selectedDeptId === "all") {
+            renderChart(globalFacultyLoadData); // Show all
+          } else {
+            // Filter data to only show professors in the selected department
+            const filteredData = globalFacultyLoadData.filter(
+              (f) => f.department_id === parseInt(selectedDeptId),
+            );
+            renderChart(filteredData);
+          }
+        });
 
       function renderChart(facultyLoadData) {
         const ctx = document

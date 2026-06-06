@@ -923,25 +923,43 @@
         });
 
       // --- 4. DELETE & MODAL CONTROLS (Unchanged) ---
+      // --- 4. DELETE & MODAL CONTROLS ---
       document
         .getElementById("deleteRoomBtn")
         .addEventListener("click", async () => {
           const roomName = globalRoomsData[currentlyEditingRoomId].name;
-          if (!confirm(`Delete ${roomName}?`)) return;
+
+          const confirmed = await SmartConfirm(
+            "Delete Room?",
+            `Are you sure you want to permanently delete ${roomName}?`,
+            "danger",
+          );
+          if (!confirmed) return;
+
           try {
             const response = await fetch(
               `${API_URL}/delete-room/${currentlyEditingRoomId}`,
               { method: "DELETE" },
             );
+
             if (response.ok) {
+              SmartAlert(
+                "success",
+                "Room Deleted",
+                `${roomName} has been removed.`,
+              );
               fetchRooms();
               closeEditModal();
             } else {
               const res = await response.json();
-              alert("Error: " + (res.detail || res.message));
+              SmartAlert("error", "Deletion Failed", res.detail || res.message);
             }
           } catch (error) {
-            alert("Failed to connect to backend.");
+            SmartAlert(
+              "error",
+              "Network Error",
+              "Failed to connect to backend.",
+            );
           }
         });
 

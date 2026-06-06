@@ -459,13 +459,41 @@
 
       // 3. Delete Department
       async function deleteDept(id) {
-        if (!confirm("Delete this? This will remove all linked data.")) return;
+        const confirmed = await SmartConfirm(
+          "Delete Department?",
+          "This will permanently remove this department and all associated batches, subjects, faculties, and timetables. This cannot be undone.",
+          "danger",
+        );
+        if (!confirmed) return;
 
-        const response = await fetch(`${API_URL}/delete-department/${id}`, {
-          method: "DELETE",
-        });
-        if (response.ok) loadDepartments();
-        else alert("Cannot delete (records might be linked).");
+        try {
+          const response = await fetch(`${API_URL}/delete-department/${id}`, {
+            method: "DELETE",
+          });
+          if (response.ok) {
+            SmartAlert(
+              "success",
+              "Department Deleted",
+              "The department has been completely removed from the system.",
+            );
+            loadDepartments();
+          } else {
+            const res = await response.json();
+            SmartAlert(
+              "error",
+              "Deletion Blocked",
+              res.detail ||
+                res.message ||
+                "Records are linked to this department.",
+            );
+          }
+        } catch (err) {
+          SmartAlert(
+            "error",
+            "Network Error",
+            "Could not connect to the database server.",
+          );
+        }
       }
 
       // Init on load

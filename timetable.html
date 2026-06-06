@@ -372,6 +372,89 @@
       </div>
     </div>
 
+    <!-- COMMAND PALETTE OVERLAY -->
+    <div
+      id="commandPalette"
+      class="fixed inset-0 z-[100] bg-primary/50 backdrop-blur-sm hidden flex items-start justify-center pt-[15vh] opacity-0 transition-opacity duration-200"
+    >
+      <div
+        class="bg-white hand-drawn-border-sm offset-shadow-sm w-[90%] max-w-2xl overflow-hidden flex flex-col transform scale-95 transition-transform duration-200"
+        id="commandPaletteContent"
+      >
+        <!-- Search Input -->
+        <div
+          class="flex items-center px-4 py-3 border-b-2 border-surface-variant"
+        >
+          <span class="material-symbols-outlined text-primary mr-3 text-2xl"
+            >search</span
+          >
+          <input
+            type="text"
+            id="commandInput"
+            class="flex-1 border-none focus:ring-0 text-xl font-body-md bg-transparent placeholder-outline-variant"
+            placeholder="Type a command or search..."
+            autocomplete="off"
+          />
+          <span
+            class="text-xs font-bold text-on-surface-variant bg-surface-container px-2 py-1 rounded-md border border-outline-variant"
+            >ESC to close</span
+          >
+        </div>
+
+        <!-- Command List -->
+        <div class="max-h-[60vh] overflow-y-auto p-2" id="commandList">
+          <div
+            class="text-xs font-bold text-on-surface-variant px-4 py-2 uppercase tracking-wider"
+          >
+            Quick Actions
+          </div>
+
+          <a
+            href="scheduler.html"
+            class="command-item flex items-center px-4 py-3 hover:bg-secondary-container hover:text-primary rounded-lg transition-colors group cursor-pointer"
+          >
+            <span
+              class="material-symbols-outlined mr-3 text-secondary group-hover:text-primary"
+              >auto_awesome</span
+            >
+            <span class="font-label-md flex-1">Run Auto-Scheduler</span>
+          </a>
+
+          <a
+            href="batch.html"
+            class="command-item flex items-center px-4 py-3 hover:bg-secondary-container hover:text-primary rounded-lg transition-colors group cursor-pointer"
+          >
+            <span
+              class="material-symbols-outlined mr-3 text-secondary group-hover:text-primary"
+              >groups</span
+            >
+            <span class="font-label-md flex-1">Manage Batches & Students</span>
+          </a>
+
+          <div
+            class="command-item flex items-center px-4 py-3 hover:bg-[#FFE194] text-primary rounded-lg transition-colors group cursor-pointer"
+            onclick="alert('Searching for empty rooms...')"
+          >
+            <span
+              class="material-symbols-outlined mr-3 group-hover:text-primary"
+              >meeting_room</span
+            >
+            <span class="font-label-md flex-1">Find empty room today</span>
+          </div>
+
+          <a
+            href="timetable.html"
+            class="command-item flex items-center px-4 py-3 hover:bg-secondary-container hover:text-primary rounded-lg transition-colors group cursor-pointer"
+          >
+            <span
+              class="material-symbols-outlined mr-3 text-secondary group-hover:text-primary"
+              >print</span
+            >
+            <span class="font-label-md flex-1">Export PDF Timetables</span>
+          </a>
+        </div>
+      </div>
+    </div>
     <script src="global.js"></script>
 
     <script>
@@ -379,8 +462,74 @@
       let allSchedules = [];
       let CURRENT_DEPT_ID = null;
       let isDraftMode = false; // Track mode globally
+      let draggedItemData = null;
+      let draggedHtmlElement = null;
 
       const dayMap = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5 };
+
+      // CMD+K / CTRL+K LISTENER
+      const commandPalette = document.getElementById("commandPalette");
+      const commandPaletteContent = document.getElementById(
+        "commandPaletteContent",
+      );
+      const commandInput = document.getElementById("commandInput");
+      const commandItems = document.querySelectorAll(".command-item");
+
+      function togglePalette() {
+        if (commandPalette.classList.contains("hidden")) {
+          // Open
+          commandPalette.classList.remove("hidden");
+          setTimeout(() => {
+            commandPalette.classList.remove("opacity-0");
+            commandPaletteContent.classList.remove("scale-95");
+            commandInput.focus();
+          }, 10);
+        } else {
+          // Close
+          commandPalette.classList.add("opacity-0");
+          commandPaletteContent.classList.add("scale-95");
+          setTimeout(() => commandPalette.classList.add("hidden"), 200);
+          commandInput.value = "";
+          filterCommands(""); // Reset filter
+        }
+      }
+
+      // Global Keyboard Shortcuts
+      document.addEventListener("keydown", (e) => {
+        // Check for Ctrl+K or Cmd+K
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault(); // Stop Chrome's default search bar
+          togglePalette();
+        }
+        // Close on Escape
+        if (
+          e.key === "Escape" &&
+          !commandPalette.classList.contains("hidden")
+        ) {
+          togglePalette();
+        }
+      });
+
+      // Close when clicking outside the box
+      commandPalette.addEventListener("click", (e) => {
+        if (e.target === commandPalette) togglePalette();
+      });
+
+      // Fuzzy Search Logic
+      commandInput.addEventListener("input", (e) => {
+        filterCommands(e.target.value.toLowerCase());
+      });
+
+      function filterCommands(query) {
+        commandItems.forEach((item) => {
+          const text = item.innerText.toLowerCase();
+          if (text.includes(query)) {
+            item.style.display = "flex";
+          } else {
+            item.style.display = "none";
+          }
+        });
+      }
 
       // --- LISTEN TO GLOBAL HEADER DROPDOWN ---
       window.addEventListener("departmentReady", async (e) => {
@@ -396,31 +545,39 @@
         }
       });
 
-      // --- NEW: DELETE SAVED TIMETABLE FUNCTION ---
       window.deleteSavedTimetable = async (batchId) => {
-        if (
-          !confirm(
-            "Are you sure you want to completely delete this saved timetable?",
-          )
-        )
-          return;
+        // Beautiful Confirmation Modal
+        const confirmed = await SmartConfirm(
+          "Wipe Saved Timetable?",
+          "Are you sure you want to completely delete this published timetable? Students will no longer see it.",
+          "danger",
+        );
+        if (!confirmed) return;
 
         try {
           const response = await fetch(
             `${API_URL}/delete-timetable/${batchId}`,
-            {
-              method: "DELETE",
-            },
+            { method: "DELETE" },
           );
           const result = await response.json();
+
           if (result.success) {
-            alert("Timetable deleted successfully.");
-            window.location.reload(); // Refresh the page to clear the grid
+            // Show toast, wait 1.5 seconds so admin can read it, then refresh
+            SmartAlert(
+              "success",
+              "Timetable Wiped",
+              "The schedule has been successfully deleted.",
+            );
+            setTimeout(() => window.location.reload(), 1500);
           } else {
-            alert("Failed to delete: " + result.message);
+            SmartAlert("error", "Deletion Failed", result.message);
           }
         } catch (e) {
-          alert("Could not connect to server.");
+          SmartAlert(
+            "error",
+            "Connection Error",
+            "Could not connect to the server.",
+          );
         }
       };
 
@@ -723,15 +880,17 @@
               const bgColor = classData.room.includes("Lab")
                 ? "bg-tertiary-fixed"
                 : "bg-[#FFE194]";
-              // UPDATED: Added drop-zone to the wrapper, and draggable/id to the card!
+
               rowHtml += `
-                    <div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone"
+                    <div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200"
+                         data-day="${dayStr}" 
+                         data-time="${slot}"
                          ondragover="handleDragOver(event)"
                          ondrop="handleDrop(event, '${dayStr}', '${slot}')">
                          
                       <div class="schedule-card ${bgColor} flex flex-col justify-between cursor-move" 
                            draggable="true" 
-                           ondragstart="handleDragStart(event, ${classData.batch_id}, ${classData.faculty_id}, ${classData.room_id})"
+                           ondragstart="handleDragStart(event, ${classData.batch_id}, ${classData.faculty_id}, ${classData.room_id}, '${dayStr}', '${slot}')"
                            id="card_${classData.id}">
                            
                         <p class="font-label-md text-primary mb-1 leading-tight">${classData.subject}</p>
@@ -742,9 +901,10 @@
                       </div>
                     </div>`;
             } else {
-              // UPDATED: Made the empty slot an active drop-zone!
               rowHtml += `
-                    <div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone"
+                    <div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200"
+                         data-day="${dayStr}" 
+                         data-time="${slot}"
                          ondragover="handleDragOver(event)"
                          ondrop="handleDrop(event, '${dayStr}', '${slot}')">
                     </div>`;
@@ -759,78 +919,175 @@
       // =========================================================
       // NEW: DRAG AND DROP TIMETABLE LOGIC
       // =========================================================
-      let draggedItemData = null;
-      let draggedHtmlElement = null;
-
-      function handleDragStart(event, batch_id, faculty_id, room_id) {
-        draggedItemData = { batch_id, faculty_id, room_id };
-        draggedHtmlElement = event.target;
-        event.target.style.opacity = "0.5"; // Make transparent while dragging
-      }
 
       function handleDragOver(event) {
-        event.preventDefault(); // This is required to allow dropping!
+        event.preventDefault(); // Necessary to allow dropping
       }
+
+      function handleDragStart(
+        event,
+        batch_id,
+        faculty_id,
+        room_id,
+        currentDay,
+        currentTime,
+      ) {
+        draggedItemData = {
+          batch_id,
+          faculty_id,
+          room_id,
+          currentDay,
+          currentTime,
+        };
+        draggedHtmlElement = event.target;
+
+        // Add a cool dragging effect
+        event.target.classList.add("opacity-50", "scale-95", "shadow-xl");
+
+        // THE MAGIC: Instantly scan the grid and highlight valid/invalid slots
+        const allDropZones = document.querySelectorAll(".drop-zone");
+
+        allDropZones.forEach((zone) => {
+          const zoneDay = zone.getAttribute("data-day");
+          const zoneTime = zone.getAttribute("data-time");
+
+          // Skip the slot the card is currently in
+          if (zoneDay === currentDay && zoneTime === currentTime) return;
+
+          // Check if there is a conflict in the loaded schedule data
+          const isConflict = allSchedules.some(
+            (s) =>
+              s.day_of_week === zoneDay &&
+              s.timeslot === zoneTime &&
+              (s.faculty_id === faculty_id || s.room_id === room_id),
+          );
+
+          if (isConflict) {
+            // RED: Slot is blocked!
+            zone.classList.add(
+              "bg-red-50",
+              "border-error",
+              "border-2",
+              "opacity-50",
+            );
+            zone.setAttribute("data-conflict", "true");
+          } else {
+            // GREEN: Slot is free!
+            zone.classList.add(
+              "bg-tertiary-fixed",
+              "border-green-600",
+              "border-2",
+              "shadow-inner",
+            );
+            zone.setAttribute("data-conflict", "false");
+          }
+        });
+      }
+
+      // 2. CLEAN UP ON DRAG END
+      document.addEventListener("dragend", () => {
+        if (draggedHtmlElement) {
+          draggedHtmlElement.classList.remove(
+            "opacity-50",
+            "scale-95",
+            "shadow-xl",
+          );
+        }
+
+        // Remove all red/green highlighting
+        document.querySelectorAll(".drop-zone").forEach((zone) => {
+          zone.classList.remove(
+            "bg-red-50",
+            "border-error",
+            "bg-tertiary-fixed",
+            "border-green-600",
+            "border-2",
+            "opacity-50",
+            "shadow-inner",
+          );
+        });
+      });
 
       async function handleDrop(event, newDay, newTimeSlot) {
         event.preventDefault();
-        draggedHtmlElement.style.opacity = "1";
-        const dropZone = event.currentTarget;
+        if (!draggedHtmlElement) return;
 
-        // Visual feedback while checking
-        dropZone.style.opacity = "0.5";
+        // 1. Find the actual drop zone container (the dashed border div)
+        let dropZone = event.target.closest(".drop-zone");
+        if (!dropZone) return;
 
+        // 2. Check if the user dropped it on a RED conflict zone
+        const isConflict = dropZone.getAttribute("data-conflict") === "true";
+
+        if (isConflict) {
+          SmartAlert(
+            "warning",
+            "Conflict Prevented",
+            "That slot is unavailable! The Professor or Room is already occupied at this time.",
+          );
+          draggedHtmlElement.style.opacity = "1";
+          return;
+        }
+
+        // 3. Get the Database ID of the card being dragged
+        const recordId = draggedHtmlElement.id.split("_")[1]; // Gets the ID from "card_45"
+
+        // 4. THE FIX: SEND THE UPDATE TO THE DATABASE INSTANTLY
         try {
-          // Ping FastAPI to verify the conflict
-          const response = await fetch(`${API_URL}/validate-swap/`, {
-            method: "POST",
+          // Show a quick loading state
+          draggedHtmlElement.style.opacity = "0.5";
+
+          const response = await fetch(`${API_URL}/update-timetable-slot/`, {
+            method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              ...draggedItemData,
+              record_id: parseInt(recordId),
               new_day: newDay,
               new_timeslot: newTimeSlot,
             }),
           });
 
           const result = await response.json();
-          dropZone.style.opacity = "1";
 
-          if (result.valid) {
-            // SUCCESS: Move the HTML element into the new slot!
-            dropZone.appendChild(draggedHtmlElement);
-
-            // Flash Green
-            draggedHtmlElement.classList.add("ring-4", "ring-green-500");
-            setTimeout(
-              () =>
-                draggedHtmlElement.classList.remove("ring-4", "ring-green-500"),
-              1000,
-            );
-
-            // Note: You can add another API call here to actually save the swap to the DB!
-          } else {
-            // FAILURE: Show error and snap back
-            alert("Cannot Move: " + result.message);
-
-            draggedHtmlElement.classList.add(
-              "ring-4",
-              "ring-error",
-              "animate-pulse",
-            );
-            setTimeout(
-              () =>
-                draggedHtmlElement.classList.remove(
-                  "ring-4",
-                  "ring-error",
-                  "animate-pulse",
-                ),
-              1000,
-            );
+          // Catch 422 Validation Errors
+          if (!response.ok) {
+            const errorMsg = result.detail
+              ? "System Data Error: Missing Record ID. Please refresh."
+              : result.message;
+            SmartAlert("error", "Move Failed", errorMsg);
+            draggedHtmlElement.style.opacity = "1";
+            return;
           }
-        } catch (error) {
-          dropZone.style.opacity = "1";
-          alert("Network error while validating move.");
+
+          // Catch Custom Backend Rejections (like Room Conflicts)
+          if (result.success === false) {
+            SmartAlert("error", "Move Prevented", result.message);
+            draggedHtmlElement.style.opacity = "1";
+            return;
+          }
+        } catch (e) {
+          alert("Network error. Could not reach the server to save.");
+          draggedHtmlElement.style.opacity = "1";
+          return;
         }
+
+        // 5. SUCCESS! DB is updated. Move the HTML card visually
+        dropZone.appendChild(draggedHtmlElement);
+        draggedHtmlElement.style.opacity = "1";
+
+        // 6. Update the local memory array so the scanner knows it moved for the next drag
+        const recordToUpdate = allSchedules.find((s) => s.id == recordId);
+        if (recordToUpdate) {
+          recordToUpdate.day_of_week = newDay;
+          recordToUpdate.timeslot = newTimeSlot;
+        }
+
+        // 7. Flash Green to show the Admin it saved successfully
+        draggedHtmlElement.classList.add("ring-4", "ring-green-500");
+        setTimeout(
+          () => draggedHtmlElement.classList.remove("ring-4", "ring-green-500"),
+          1000,
+        );
       }
     </script>
   </body>

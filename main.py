@@ -193,6 +193,16 @@ class SubjectCreate(BaseModel):
 #     department_id: int
 
 
+
+class AutoFixRequest(BaseModel):
+    department_id: int
+    faculty_id: int
+    room_id: int
+    target_day: str
+    target_timeslot: str
+    original_day: str
+    original_timeslot: str
+
 class ExpertiseCreate(BaseModel):
     faculty_id: int
     subject_id: int
@@ -210,7 +220,10 @@ class GenerateRequest(BaseModel):
     end_hour: int = 16
     break_hour: int = 12
 
-
+class UpdateSlotRequest(BaseModel):
+    record_id: int
+    new_day: str
+    new_timeslot: str
 
 class TimetableRecord(BaseModel):
     department_id: int
@@ -239,32 +252,21 @@ def add_department(dept: DeptCreate):
     cursor = conn.cursor()
 
     try:
-        # Removed shift from the database insertion
+        # Correctly insert into the 'departments' table using 'dept.name'
         cursor.execute("""
-            INSERT INTO batches (
-                name,
-                student_count,
-                mentor_id,
-                department_id
-            )
-            VALUES (%s,%s,%s,%s)
-        """, (
-            batch.name,
-            batch.student_count,
-            batch.mentor_id,
-            batch.department_id
-        ))
+            INSERT INTO departments (name)
+            VALUES (%s)
+        """, (dept.name,))
 
         conn.commit()
 
         return {
             "success": True,
-            "message": "Batch added successfully"
+            "message": "Department added successfully"
         }
 
     except errors.UniqueViolation:
         conn.rollback()
-
         raise HTTPException(
             status_code=400,
             detail="Department already exists"
@@ -277,24 +279,25 @@ def add_department(dept: DeptCreate):
     finally:
         cursor.close()
         release_db_connection(conn)
-
-
+        
 @app.get("/get-departments/")
 def get_departments():
-
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
         cursor.execute("""
-            SELECT *
+            SELECT id, name
             FROM departments
-            ORDER BY id ASC
+            ORDER BY name ASC
         """)
 
         return {
             "data": cursor.fetchall()
         }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     finally:
         cursor.close()
@@ -566,6 +569,8 @@ def add_batch(batch: BatchCreate):
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    mentor_val = batch.mentor_id if batch.mentor_id and batch.mentor_id > 0 else None
+    
     try:
 
         # CHANGE:
@@ -581,6 +586,12 @@ def add_batch(batch: BatchCreate):
             "success": True,
             "message": "Batch added successfully"
         }
+    except errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail="A batch with this name already exists in this department."
+        )
 
     except Exception as e:
         conn.rollback()
@@ -630,6 +641,8 @@ def get_batches(department_id: int):
 def edit_batch(batch_id: int, batch: BatchCreate):
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    mentor_val = batch.mentor_id if batch.mentor_id and batch.mentor_id > 0 else None
 
     try:
         cursor.execute("""
@@ -650,6 +663,10 @@ def edit_batch(batch_id: int, batch: BatchCreate):
             "success": True,
             "message": "Batch updated successfully"
         }
+    
+    except errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Another batch with this name already exists.")
 
     except Exception as e:
         conn.rollback()
@@ -1527,31 +1544,98 @@ def validate_timetable_swap(payload: SwapValidationRequest):
         release_db_connection(conn)
 
 
+
+
+@app.post("/suggest-auto-fix/")
+def suggest_auto_fix(payload: AutoFixRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # 1. Find exactly WHAT is causing the conflict
+        cursor.execute("""
+            SELECT id, subject_id, batch_id, faculty_id, room_id, day_of_week, timeslot 
+            FROM timetables 
+            WHERE department_id = %s AND day_of_week = %s AND timeslot = %s
+            AND (faculty_id = %s OR room_id = %s)
+        """, (payload.department_id, payload.target_day, payload.target_timeslot, payload.faculty_id, payload.room_id))
+        
+        conflict_class = cursor.fetchone()
+        
+        if not conflict_class:
+            return {"can_fix": True, "message": "No conflict detected. Move is valid."}
+
+        # 2. Try the easiest swap: Can the conflicting class just move to the empty slot we are leaving behind?
+        cursor.execute("""
+            SELECT id FROM timetables 
+            WHERE day_of_week = %s AND timeslot = %s AND (faculty_id = %s OR room_id = %s)
+        """, (payload.original_day, payload.original_timeslot, conflict_class["faculty_id"], conflict_class["room_id"]))
+        
+        reverse_conflict = cursor.fetchone()
+        
+        if not reverse_conflict:
+            return {
+                "can_fix": True, 
+                "type": "Direct Swap",
+                "message": f"Swap Suggested: Move this class here, and move the conflicting class to {payload.original_day} at {payload.original_timeslot}.",
+                "displaced_class_id": conflict_class["id"],
+                "new_day": payload.original_day,
+                "new_time": payload.original_timeslot
+            }
+            
+        # 3. If a direct swap fails, the Mini-Solver would trigger here to search all days.
+        # For now, return a failure if the simple swap doesn't work.
+        return {"can_fix": False, "message": "Complex conflict. Manual intervention required."}
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+
+# =========================================================
+# LIVE DRAG & DROP SAVE API
+# =========================================================
+@app.put("/update-timetable-slot/")
+def update_timetable_slot(payload: UpdateSlotRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Update the database with the new day and time
+        cursor.execute("""
+            UPDATE timetables 
+            SET day_of_week = %s, timeslot = %s 
+            WHERE id = %s
+        """, (payload.new_day, payload.new_timeslot, payload.record_id))
+        
+        conn.commit()
+        return {"success": True, "message": "Timetable updated permanently!"}
+        
+    except Exception as e:
+        conn.rollback()
+        # If the database throws a Unique Constraint error (conflict), catch it safely!
+        if "unique constraint" in str(e).lower():
+            return {"success": False, "message": "Database Conflict: Room or Faculty is occupied."}
+        return {"success": False, "message": str(e)}
+        
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
 # =========================================================
 # VIEW TIMETABLE
 # =========================================================
 
 @app.get("/view-timetable/")
-def view_timetable(
-    department_id: Optional[int] = None,
-    batch_id: Optional[int] = None
-):
-
+def view_timetable(department_id: int = None, batch_id: int = None):
     conn = get_db_connection()
     cursor = conn.cursor()
-
     try:
-
-        # Update the query string inside view_timetable:
+        # THE FIX: Added t.id, t.batch_id, t.faculty_id, t.room_id, t.notes
         query = """
-            SELECT
-                t.day_of_week,
-                t.timeslot,
-                t.notes,  -- <-- ADD THIS LINE
-                b.name AS batch,
-                s.name AS subject,
-                r.name AS room,
-                f.name AS faculty
+            SELECT 
+                t.id, t.batch_id, t.faculty_id, t.room_id, t.notes,
+                t.day_of_week, t.timeslot, b.name AS batch, s.name AS subject, 
+                r.name AS room, f.name AS faculty
             FROM timetables t
             JOIN batches b ON t.batch_id = b.id
             JOIN subjects s ON t.subject_id = s.id
@@ -1562,18 +1646,17 @@ def view_timetable(
         params = []
 
         if department_id:
-
             query += " AND t.department_id = %s"
             params.append(department_id)
 
         if batch_id:
-
             query += " AND t.batch_id = %s"
             params.append(batch_id)
 
         cursor.execute(query, tuple(params))
 
         return {
+            "success": True,
             "data": cursor.fetchall()
         }
 
@@ -1582,9 +1665,11 @@ def view_timetable(
 
     finally:
         cursor.close()
-        release_db_connection(conn)    
+        release_db_connection(conn)
         
-        
+# =========================================================
+# DELETE TIMETABLE (FOR RE-GENERATION)
+# ========================================================= 
 @app.delete("/delete-timetable/{batch_id}")
 def delete_timetable(batch_id: int):
     conn = get_db_connection()
@@ -1638,12 +1723,12 @@ def get_global_dashboard_stats():
         booked_slots = cursor.fetchone()["count"]
         utilization = round((booked_slots / total_possible_slots) * 100) if total_possible_slots > 0 else 0
 
-        # 2. Faculty Workload & Overload Calculation
+       # 2. Faculty Workload & Overload Calculation
         cursor.execute("""
-            SELECT f.name, COUNT(t.id) as assigned_hours, f.max_weekly_hours 
+            SELECT f.id, f.name, COUNT(t.id) as assigned_hours, f.max_weekly_hours, f.department_id 
             FROM faculties f
             LEFT JOIN timetables t ON f.id = t.faculty_id
-            GROUP BY f.id, f.name, f.max_weekly_hours
+            GROUP BY f.id, f.name, f.max_weekly_hours, f.department_id
             ORDER BY assigned_hours DESC
         """)
         faculty_load = cursor.fetchall()

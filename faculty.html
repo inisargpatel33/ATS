@@ -281,6 +281,74 @@
       </div>
     </div>
 
+    <!-- Edit Faculty Modal -->
+    <div
+      id="editFacultyModal"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-primary/40 backdrop-blur-sm opacity-0 hidden transition-opacity duration-300"
+    >
+      <div
+        id="editFacultyModalContent"
+        class="bg-surface w-[90%] max-w-md hand-drawn-border-sm offset-shadow-sm p-6 md:p-8 transform scale-95 transition-transform duration-300"
+      >
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-headline-md text-2xl text-primary">Edit Faculty</h3>
+          <button
+            onclick="closeEditFacultyModal()"
+            type="button"
+            class="text-on-surface-variant hover:text-error transition-colors p-1"
+          >
+            <span class="material-symbols-outlined text-3xl">close</span>
+          </button>
+        </div>
+
+        <form id="editFacultyForm" class="space-y-5">
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Faculty Name <span class="text-error">*</span></label
+            >
+            <input
+              type="text"
+              id="editFacultyName"
+              required
+              class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container"
+            />
+          </div>
+          <div class="flex flex-col space-y-2">
+            <label class="font-label-md text-primary font-bold"
+              >Max Weekly Hours <span class="text-error">*</span></label
+            >
+            <input
+              type="number"
+              id="editFacultyHours"
+              required
+              min="1"
+              max="40"
+              class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container"
+            />
+            <p class="text-label-sm text-on-surface-variant">
+              Must be between 1 and 40.
+            </p>
+          </div>
+          <div class="pt-4 flex gap-4">
+            <button
+              type="button"
+              onclick="closeEditFacultyModal()"
+              class="w-1/2 bg-surface text-primary border-2 border-primary font-label-md py-3 px-4 rounded-lg active:translate-y-1 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              id="updateFacultyBtn"
+              class="w-1/2 bg-primary text-on-primary font-label-md py-3 px-4 rounded-lg shadow-[4px_4px_0px_0px_rgba(24,25,25,0.3)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
+            >
+              <span class="material-symbols-outlined">update</span> Update
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Expertise Modal -->
     <div
       id="expertiseModal"
@@ -391,6 +459,12 @@
               <button onclick="openExpertiseModal(${fac.id})" class="p-1.5 hover:bg-secondary-container rounded-md transition-colors" title="Set Expertise">
                 <span class="material-symbols-outlined text-[20px]">psychology</span>
               </button>
+              
+              <button onclick="openEditFacultyModal(${fac.id}, '${fac.name}', ${fac.max_weekly_hours})" class="p-1.5 hover:bg-surface-container rounded-md transition-colors" title="Edit Faculty">
+                <span class="material-symbols-outlined text-[20px]">edit</span>
+              </button>
+
+
               <button onclick="deleteFaculty(${fac.id})" class="p-1.5 hover:bg-error-container hover:text-error rounded-md transition-colors" title="Delete">
                 <span class="material-symbols-outlined text-[20px]">delete</span>
               </button>
@@ -515,18 +589,40 @@
       }
 
       // --- 5. DELETE & MODAL CONTROLS ---
+      // --- 5. DELETE & MODAL CONTROLS ---
       async function deleteFaculty(id) {
-        if (
-          !confirm(
-            "Remove this faculty member? This may affect active schedules.",
-          )
-        )
-          return;
-        const response = await fetch(`${API_URL}/delete-faculty/${id}`, {
-          method: "DELETE",
-        });
-        if (response.ok) loadFaculties();
-        else alert("Cannot delete. They might be assigned to a timetable.");
+        const confirmed = await SmartConfirm(
+          "Remove Faculty?",
+          "Are you sure you want to remove this faculty member? This may affect active schedules.",
+          "danger",
+        );
+        if (!confirmed) return;
+
+        try {
+          const response = await fetch(`${API_URL}/delete-faculty/${id}`, {
+            method: "DELETE",
+          });
+
+          if (response.ok) {
+            SmartAlert(
+              "success",
+              "Faculty Removed",
+              "The faculty member has been deleted.",
+            );
+            loadFaculties();
+          } else {
+            const res = await response.json();
+            SmartAlert(
+              "error",
+              "Cannot Delete",
+              res.detail ||
+                res.message ||
+                "They might be assigned to a timetable.",
+            );
+          }
+        } catch (error) {
+          SmartAlert("error", "Network Error", "Failed to connect to backend.");
+        }
       }
 
       openModalBtn.addEventListener("click", () => {
@@ -547,6 +643,77 @@
       addModal.addEventListener("click", (e) => {
         if (e.target === addModal) closeModal();
       });
+
+      // --- EDIT FACULTY LOGIC ---
+      let editingFacultyId = null;
+
+      window.openEditFacultyModal = (id, name, hours) => {
+        editingFacultyId = id;
+        document.getElementById("editFacultyName").value = name;
+        document.getElementById("editFacultyHours").value = hours;
+
+        const modal = document.getElementById("editFacultyModal");
+        modal.classList.remove("hidden");
+        setTimeout(() => {
+          modal.classList.remove("opacity-0");
+          document
+            .getElementById("editFacultyModalContent")
+            .classList.remove("scale-95");
+        }, 10);
+      };
+
+      window.closeEditFacultyModal = () => {
+        const modal = document.getElementById("editFacultyModal");
+        modal.classList.add("opacity-0");
+        document
+          .getElementById("editFacultyModalContent")
+          .classList.add("scale-95");
+        setTimeout(() => modal.classList.add("hidden"), 300);
+      };
+
+      document
+        .getElementById("editFacultyForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const btn = document.getElementById("updateFacultyBtn");
+          btn.disabled = true;
+          btn.innerHTML = `<span class="material-symbols-outlined animate-spin">sync</span> Updating...`;
+
+          const payload = {
+            department_id: CURRENT_DEPT_ID,
+            name: document.getElementById("editFacultyName").value,
+            max_weekly_hours: parseInt(
+              document.getElementById("editFacultyHours").value,
+            ),
+          };
+
+          try {
+            const response = await fetch(
+              `${API_URL}/edit-faculty/${editingFacultyId}`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              },
+            );
+            if (response.ok) {
+              SmartAlert(
+                "success",
+                "Faculty Updated",
+                "Details saved successfully.",
+              );
+              loadFaculties();
+              closeEditFacultyModal();
+            } else {
+              SmartAlert("error", "Update Failed", "Could not update faculty.");
+            }
+          } catch (err) {
+            SmartAlert("error", "Network Error", "Server is unreachable.");
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<span class="material-symbols-outlined">update</span> Update`;
+          }
+        });
     </script>
     <script src="global.js"></script>
   </body>

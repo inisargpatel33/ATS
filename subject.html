@@ -660,31 +660,44 @@
         });
 
       // --- 5. DELETE & MODAL CONTROLS ---
+      // --- 5. DELETE & MODAL CONTROLS ---
       document
         .getElementById("deleteSubjectBtn")
         .addEventListener("click", async () => {
           const subjectName =
             globalSubjectsData[currentlyEditingSubjectId].name;
-          if (
-            !confirm(
-              `Delete ${subjectName}? This will remove it from any faculty expertise or active timetables.`,
-            )
-          )
-            return;
+
+          const confirmed = await SmartConfirm(
+            "Delete Subject?",
+            `Are you sure you want to delete ${subjectName}? This will remove it from any faculty expertise or active timetables.`,
+            "danger",
+          );
+          if (!confirmed) return;
+
           try {
             const response = await fetch(
               `${API_URL}/delete-subject/${currentlyEditingSubjectId}`,
               { method: "DELETE" },
             );
+
             if (response.ok) {
+              SmartAlert(
+                "success",
+                "Subject Deleted",
+                `${subjectName} has been removed.`,
+              );
               fetchSubjects();
               closeEditModal();
             } else {
               const res = await response.json();
-              alert("Error: " + (res.detail || res.message));
+              SmartAlert("error", "Deletion Failed", res.detail || res.message);
             }
           } catch (error) {
-            alert("Failed to connect to backend.");
+            SmartAlert(
+              "error",
+              "Network Error",
+              "Failed to connect to backend.",
+            );
           }
         });
 
