@@ -1091,6 +1091,27 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                             
                 valid_rooms.sort(key=lambda r: r["capacity"])
                 eligible_rooms[(subject["id"], batch["id"])] = valid_rooms[:room_buffer]
+                
+        
+        # =====================================================
+        # DIAGNOSTIC C: ANTI-SILENT-FAILURE CHECK (NEW)
+        # =====================================================
+        for batch in batches:
+            b_id = batch["id"]
+            for subject in subjects:
+                if subject["semester"] != batch["semester"]: continue
+                sub_id = subject["id"]
+                
+                # Check 1: Does this subject have a professor assigned?
+                can_teach = any((f["id"], sub_id) in exp_map for f in faculties)
+                if not can_teach:
+                    return {"success": False, "message": f"SETUP ERROR: No Faculty is assigned to teach '{subject['name']}'. Please map expertise first!"}
+                
+                # Check 2: Is there a room big enough?
+                valid_rooms = eligible_rooms.get((sub_id, b_id), [])
+                if not valid_rooms:
+                    req_type = "Laboratory" if subject["subject_type"] == "Practical" else "Lecture Hall/Seminar Room"
+                    return {"success": False, "message": f"ROOM ERROR: No '{req_type}' has enough capacity for Batch '{batch['name']}' ({batch['student_count']} students) for '{subject['name']}'!"}
 
         # =====================================================
         # 4. THE 3-OPTION GENERATOR LOOP
@@ -1163,9 +1184,13 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                 max_hrs = next((f["max_weekly_hours"] for f in faculties if f["id"] == fac_id), 40)
                 if vars_list: model.Add(sum(vars_list) <= max_hrs)
 
-            # --- 4C. SESSIONS & LAB STACKING ---
+            
+           # --- 4C. SESSIONS & LAB STACKING ---
             for batch in batches:
                 for subject in subjects:
+                    # Skip subjects that do not belong to this batch's semester
+                    if subject["semester"] != batch["semester"]: continue
+                    
                     sub_id = subject["id"]
                     b_id = batch["id"]
                     req = subject["required_sessions"]
@@ -1173,47 +1198,72 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                     sub_vars = batch_subject.get((b_id, sub_id), [])
                     
                     if subject["subject_type"] == "Practical":
-                        block_vars = []
-                        for fac in faculties:
-                            if (fac["id"], sub_id) not in exp_map: continue
-                            for room in eligible_rooms.get((sub_id, b_id), []):
-                                for day in DAYS:
-                                    for i in range(len(dynamic_slots) - req + 1):
-                                        if slot_hours[i + req - 1] - slot_hours[i] != req - 1: continue 
-                                        
-                                        valid_block = True
-                                        block_sub_vars = []
-                                        for j in range(req):
-                                            var_k = (fac["id"], sub_id, room["id"], day, dynamic_slots[i+j], b_id)
-                                            if var_k in x: block_sub_vars.append(x[var_k])
-                                            else: valid_block = False; break
-                                                
-                                        if valid_block:
-                                            block_var = model.NewBoolVar(f"blk_{b_id}_{sub_id}_{fac['id']}_{room['id']}_{day}_{i}")
-                                            block_vars.append(block_var)
-                                            for var in block_sub_vars:
-                                                model.AddImplication(block_var, var)
-                                                
-                        if block_vars: model.AddExactlyOne(block_vars)
-                        if sub_vars: model.Add(sum(sub_vars) == req)
-                    else:
-                       # =====================================================
-                        # FIX B: PREVENT CONSECUTIVE SAME-SUBJECT STACKING
                         # =====================================================
-                        # The engine can schedule this subject multiple times a day, 
-                        # but NEVER back-to-back in consecutive slots.
+                        # FIX: IRONCLAD 2-HOUR LAB BLOCKS
+                        # =====================================================
+                        # Split 4 required sessions into exactly TWO 2-hour blocks
+                        num_blocks = req // 2 if req >= 2 else 1
+                        expected_slots = num_blocks * 2
+                        
+                        all_block_vars = []
+                        for day in DAYS:
+                            day_block_vars = []
+                            for fac in faculties:
+                                if (fac["id"], sub_id) not in exp_map: continue
+                                for room in eligible_rooms.get((sub_id, b_id), []):
+                                    for i in range(len(dynamic_slots) - 1): 
+                                        
+                                        # Must be contiguous 2 hours (no lunch breaks in between)
+                                        if slot_hours[i + 1] - slot_hours[i] != 1: continue 
+                                        
+                                        var1 = x.get((fac["id"], sub_id, room["id"], day, dynamic_slots[i], b_id))
+                                        var2 = x.get((fac["id"], sub_id, room["id"], day, dynamic_slots[i+1], b_id))
+                                        
+                                        if var1 is not None and var2 is not None:
+                                            # Create a Boolean representing this specific 2-hour block
+                                            block_var = model.NewBoolVar(f"blk_{b_id}_{sub_id}_{fac['id']}_{room['id']}_{day}_{i}")
+                                            all_block_vars.append(block_var)
+                                            day_block_vars.append(block_var)
+                                            
+                                            # If this 2-hour block is chosen, BOTH 1-hour slots MUST be active
+                                            model.Add(var1 == 1).OnlyEnforceIf(block_var)
+                                            model.Add(var2 == 1).OnlyEnforceIf(block_var)
+                            
+                            # Limit: A batch can only have ONE 2-hour session of this specific lab per day
+                            if day_block_vars:
+                                model.Add(sum(day_block_vars) <= 1)
+                                                
+                        if all_block_vars: 
+                            # Force the engine to select exactly `num_blocks` 2-hour pairs (e.g., 2 pairs for 4 hours)
+                            model.Add(sum(all_block_vars) == num_blocks)
+                            
+                        if sub_vars: 
+                            # CRITICAL ANTI-CHEATING MEASURE:
+                            # The total 1-hour slots MUST equal the blocks. No extra stray 1-hour labs allowed!
+                            model.Add(sum(sub_vars) == expected_slots)
+                            
+                    else:
+                        # =====================================================
+                        # THEORY & SEMINAR CLASSES
+                        # =====================================================
+                        # Force the exact number of lectures (Stops over-scheduling!)
+                        if sub_vars: model.Add(sum(sub_vars) == req)
+                        
+                        # Prevent consecutive same-subject stacking for Theory
                         for day in DAYS:
                             for i in range(len(dynamic_slots) - 1):
                                 slot1 = dynamic_slots[i]
                                 slot2 = dynamic_slots[i+1]
                                 
-                                # Get the variables for this subject at slot t and t+1
                                 s1_vars = batch_day_slot_sub.get((b_id, day, slot1, sub_id), [])
                                 s2_vars = batch_day_slot_sub.get((b_id, day, slot2, sub_id), [])
                                 
                                 if s1_vars and s2_vars:
                                     # Hard rule: The sum of these two consecutive slots cannot exceed 1
                                     model.Add(sum(s1_vars) + sum(s2_vars) <= 1)
+            
+            
+            
             # --- 4D. DATABASE LOCK ---
             for booking in existing_bookings:
                 d, t = booking["day_of_week"], booking["timeslot"]
