@@ -484,11 +484,40 @@
       let isDraftMode = false;
       let draggedItemData = null;
       let draggedHtmlElement = null;
-      let currentAnalysisData = null; // Store analysis data
+      let currentAnalysisData = null;
 
       const dayMap = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5 };
 
-      // CMD+K / CTRL+K LISTENER
+      // --- UNIVERSAL ANALYSIS BUTTON LISTENER ---
+      document.addEventListener("DOMContentLoaded", () => {
+        const viewAnalysisBtn = document.getElementById("viewAnalysisBtn");
+        if (viewAnalysisBtn) {
+          viewAnalysisBtn.addEventListener("click", () => {
+            const container = document.getElementById(
+              "analysisReportContainer",
+            );
+            if (container.classList.contains("hidden")) {
+              container.classList.remove("hidden");
+              if (!currentAnalysisData) {
+                document.getElementById("analysisMetricsGrid").innerHTML =
+                  `<div class="col-span-full p-4 text-center text-error font-bold">Analysis data not generated for this batch.</div>`;
+                document.getElementById("analysisMissingGrid").innerHTML = "";
+                document.getElementById("analysisConstraintsGrid").innerHTML =
+                  "";
+                document.getElementById("analysisSmartSlots").innerHTML = "";
+                document.getElementById("analysisOptGrid").innerHTML = "";
+              } else {
+                renderAnalysisUI();
+              }
+              container.scrollIntoView({ behavior: "smooth", block: "start" });
+            } else {
+              container.classList.add("hidden");
+            }
+          });
+        }
+      });
+
+      // --- CMD+K ---
       const commandPalette = document.getElementById("commandPalette");
       const commandPaletteContent = document.getElementById(
         "commandPaletteContent",
@@ -518,26 +547,24 @@
           e.preventDefault();
           togglePalette();
         }
-        if (
-          e.key === "Escape" &&
-          !commandPalette.classList.contains("hidden")
-        ) {
+        if (e.key === "Escape" && !commandPalette.classList.contains("hidden"))
           togglePalette();
-        }
       });
       commandPalette.addEventListener("click", (e) => {
         if (e.target === commandPalette) togglePalette();
       });
-      commandInput.addEventListener("input", (e) => {
-        filterCommands(e.target.value.toLowerCase());
-      });
+      commandInput.addEventListener("input", (e) =>
+        filterCommands(e.target.value.toLowerCase()),
+      );
       function filterCommands(query) {
         commandItems.forEach((item) => {
-          const text = item.innerText.toLowerCase();
-          item.style.display = text.includes(query) ? "flex" : "none";
+          item.style.display = item.innerText.toLowerCase().includes(query)
+            ? "flex"
+            : "none";
         });
       }
 
+      // --- INITIALIZATION ---
       window.addEventListener("departmentReady", async (e) => {
         CURRENT_DEPT_ID = parseInt(e.detail);
         const urlParams = new URLSearchParams(window.location.search);
@@ -547,12 +574,12 @@
       });
 
       window.deleteSavedTimetable = async (batchId) => {
-        const confirmed = await SmartConfirm(
-          "Delete Timetable?",
-          "Are you sure you want to completely delete this saved timetable?",
-          "danger",
-        );
-        if (!confirmed) return;
+        if (
+          !confirm(
+            "Are you sure you want to completely delete this saved timetable?",
+          )
+        )
+          return;
         try {
           const response = await fetch(
             `${API_URL}/delete-timetable/${batchId}`,
@@ -560,61 +587,92 @@
           );
           const result = await response.json();
           if (result.success) {
-            SmartAlert("success", "Deleted", "Timetable deleted successfully.");
+            alert("Timetable deleted successfully.");
             setTimeout(() => window.location.reload(), 1000);
           } else {
-            SmartAlert("error", "Error", result.message);
+            alert("Error: " + result.message);
           }
         } catch (e) {
-          SmartAlert("error", "Error", "Could not connect to server.");
+          alert("Error: Could not connect to server.");
         }
       };
 
-      function initDraftMode() {
+      async function initDraftMode() {
         document.getElementById("draftBanner").classList.remove("hidden");
-        // Keep the page title visible so the View Analysis button shows up
         document.getElementById("pageTitleUI").classList.remove("hidden");
-        document.getElementById("batchSelectionUI").classList.add("hidden");
+        document.getElementById("batchSelectionUI").classList.remove("hidden");
 
         const draftOptions = JSON.parse(sessionStorage.getItem("draftOptions"));
         if (!draftOptions || draftOptions.length === 0) {
-          SmartAlert("error", "Error", "Draft data expired or missing.");
+          alert("Draft data expired or missing.");
           window.location.href = "timetable.html";
           return;
         }
+
+        const deptId = sessionStorage.getItem("draftDeptId") || CURRENT_DEPT_ID;
+        const targetBatchId = sessionStorage.getItem("draftBatchId");
+        const batchSelect = document.getElementById("batchSelectFilter");
+        if (!batchSelect) return;
+
+        batchSelect.innerHTML = `<option value="" disabled>Select a Batch...</option>`;
+
+        try {
+          const batchRes = await fetch(`${API_URL}/get-batches/${deptId}`);
+          const batchData = await batchRes.json();
+          if (batchData.data.length === 0) {
+            document.getElementById("gridContainer").innerHTML =
+              `<div class="flex flex-col items-center justify-center p-16 text-error w-full h-full mt-10"><span class="material-symbols-outlined text-[64px] mb-4 opacity-50">warning</span><p class="font-headline-md text-xl">No Batches Found</p></div>`;
+            return;
+          }
+          batchData.data.forEach((b) => {
+            if (draftOptions[0].analyses && draftOptions[0].analyses[b.id]) {
+              batchSelect.innerHTML += `<option value="${b.id}" data-batchname="${b.name}">${b.name}</option>`;
+            }
+          });
+          if (targetBatchId && targetBatchId !== "all") {
+            batchSelect.value = targetBatchId;
+          } else if (batchSelect.options.length > 1) {
+            batchSelect.selectedIndex = 1;
+          } else {
+            batchSelect.selectedIndex = 0;
+          }
+        } catch (e) {
+          alert("Network Error: Could not fetch batches.");
+          return;
+        }
+
+        if (batchSelect.selectedIndex <= 0) return;
+
+        const activeBatchId = parseInt(batchSelect.value);
+        const activeBatchName =
+          batchSelect.options[batchSelect.selectedIndex].getAttribute(
+            "data-batchname",
+          );
+
+        window.currentlySelectedDraftIndex = 0;
+        allSchedules = draftOptions[0].records;
+        renderGrid(activeBatchName);
+
+        if (
+          draftOptions[0].analyses &&
+          draftOptions[0].analyses[activeBatchId]
+        ) {
+          currentAnalysisData = draftOptions[0].analyses[activeBatchId];
+        }
+
+        document.getElementById("viewAnalysisBtn").classList.remove("hidden");
 
         const optionsContainer = document.getElementById(
           "draftOptionsContainer",
         );
         optionsContainer.innerHTML = "";
-        let currentlySelectedDraftIndex = 0;
 
-        // =========================================================
-        // FIX: MAKE "VIEW ANALYSIS" A TOGGLE SWITCH
-        // =========================================================
-        const viewAnalysisBtn = document.getElementById("viewAnalysisBtn");
-        viewAnalysisBtn.classList.remove("hidden");
-        viewAnalysisBtn.onclick = () => {
-          const container = document.getElementById("analysisReportContainer");
-          if (container.classList.contains("hidden")) {
-            container.classList.remove("hidden");
-            renderAnalysisUI();
-            container.scrollIntoView({ behavior: "smooth", block: "start" });
-          } else {
-            container.classList.add("hidden"); // Hide it if already open
-          }
-        };
-
-        // =========================================================
-        // FIX: LIVE UPDATING TABS
-        // =========================================================
         draftOptions.forEach((opt, index) => {
           const btn = document.createElement("button");
           btn.className = `px-4 py-1.5 font-label-sm font-bold rounded-md transition-colors ${index === 0 ? "bg-primary text-on-primary" : "text-primary hover:bg-surface-container"}`;
           btn.innerText = opt.option_name;
 
           btn.onclick = () => {
-            // Update UI Tab Colors
             Array.from(optionsContainer.children).forEach((b) => {
               b.classList.remove("bg-primary", "text-on-primary");
               b.classList.add("text-primary", "hover:bg-surface-container");
@@ -622,66 +680,45 @@
             btn.classList.remove("text-primary", "hover:bg-surface-container");
             btn.classList.add("bg-primary", "text-on-primary");
 
-            // Switch Grid Data
-            currentlySelectedDraftIndex = index;
+            window.currentlySelectedDraftIndex = index;
             allSchedules = draftOptions[index].records;
-            renderGrid(draftOptions[index].records[0]?.batch || "Unknown");
 
-            // Extract the Analysis Data for this new option
-            const b_id = draftOptions[index].records[0]?.batch_id;
-            if (
-              b_id &&
-              draftOptions[index].analyses &&
-              draftOptions[index].analyses[b_id]
-            ) {
-              currentAnalysisData = draftOptions[index].analyses[b_id];
-
-              // IF THE ANALYSIS PANEL IS CURRENTLY OPEN, UPDATE IT LIVE!
-              const analysisContainer = document.getElementById(
-                "analysisReportContainer",
-              );
-              if (!analysisContainer.classList.contains("hidden")) {
-                renderAnalysisUI();
+            if (batchSelect.selectedIndex > 0) {
+              const bName =
+                batchSelect.options[batchSelect.selectedIndex].getAttribute(
+                  "data-batchname",
+                );
+              const bId = parseInt(batchSelect.value);
+              renderGrid(bName);
+              if (
+                draftOptions[index].analyses &&
+                draftOptions[index].analyses[bId]
+              ) {
+                currentAnalysisData = draftOptions[index].analyses[bId];
+                if (
+                  !document
+                    .getElementById("analysisReportContainer")
+                    .classList.contains("hidden")
+                ) {
+                  renderAnalysisUI();
+                }
               }
             }
           };
           optionsContainer.appendChild(btn);
         });
 
-        // Initial Load (Option 1)
-        allSchedules = draftOptions[0].records;
-        renderGrid(draftOptions[0].records[0]?.batch || "Unknown");
-
-        const initial_b_id = draftOptions[0].records[0]?.batch_id;
-        if (
-          initial_b_id &&
-          draftOptions[0].analyses &&
-          draftOptions[0].analyses[initial_b_id]
-        ) {
-          currentAnalysisData = draftOptions[0].analyses[initial_b_id];
-        }
-
-        // --- Save / Discard Logic ---
+        document
+          .getElementById("discardDraftBtn")
+          .addEventListener("click", () => {
+            if (!confirm("Discard all draft options?")) return;
+            sessionStorage.removeItem("draftOptions");
+            window.location.href = "timetable.html";
+          });
         const saveModal = document.getElementById("saveTimetableModal");
         const saveContent = document.getElementById(
           "saveTimetableModalContent",
         );
-
-        document
-          .getElementById("discardDraftBtn")
-          .addEventListener("click", async () => {
-            if (
-              !(await SmartConfirm(
-                "Discard Draft?",
-                "Discard all draft options?",
-                "danger",
-              ))
-            )
-              return;
-            sessionStorage.removeItem("draftOptions");
-            window.location.href = "timetable.html";
-          });
-
         document
           .getElementById("openSaveModalBtn")
           .addEventListener("click", () => {
@@ -691,7 +728,6 @@
               saveContent.classList.remove("scale-95");
             }, 10);
           });
-
         document
           .getElementById("closeSaveModalBtn")
           .addEventListener("click", () => {
@@ -699,53 +735,44 @@
             saveContent.classList.add("scale-95");
             setTimeout(() => saveModal.classList.add("hidden"), 300);
           });
-
-        document
-          .getElementById("confirmSaveBtn")
-          .addEventListener("click", async function () {
-            const notes = document.getElementById("timetableNotes").value;
-            this.innerHTML = "Saving...";
-            this.disabled = true;
-            try {
-              const selectedRecords =
-                draftOptions[currentlySelectedDraftIndex].records;
-              const response = await fetch(`${API_URL}/save-timetable/`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  records: selectedRecords,
-                  notes: notes,
-                }),
-              });
-              const result = await response.json();
-              if (result.success) {
-                SmartAlert(
-                  "success",
-                  "Success",
-                  "Timetable Published Successfully!",
-                );
-                sessionStorage.removeItem("draftOptions");
-                setTimeout(
-                  () => (window.location.href = "timetable.html"),
-                  1000,
-                );
-              } else {
-                SmartAlert("error", "Error", result.message);
-              }
-            } catch (e) {
-              SmartAlert("error", "Error", "Failed to connect to server.");
-            } finally {
+        document.getElementById("confirmSaveBtn").onclick = async function () {
+          const notes = document.getElementById("timetableNotes").value;
+          this.innerHTML = "Saving...";
+          this.disabled = true;
+          try {
+            const selectedRecords =
+              draftOptions[window.currentlySelectedDraftIndex].records;
+            const response = await fetch(`${API_URL}/save-timetable/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ records: selectedRecords, notes: notes }),
+            });
+            const result = await response.json();
+            if (result.success) {
+              alert("Timetable Published Successfully!");
+              sessionStorage.removeItem("draftOptions");
+              setTimeout(() => (window.location.href = "timetable.html"), 500);
+            } else {
+              alert("Error: " + result.message);
               this.innerHTML = `<span class="material-symbols-outlined text-[18px]">save</span> Confirm & Save`;
               this.disabled = false;
             }
-          });
+          } catch (e) {
+            alert("Error: Failed to connect to server.");
+            this.innerHTML = `<span class="material-symbols-outlined text-[18px]">save</span> Confirm & Save`;
+            this.disabled = false;
+          }
+        };
       }
 
+      // --- NORMAL MODE ---
       async function initNormalMode() {
         if (!CURRENT_DEPT_ID) return;
         document.getElementById("pageTitleUI").classList.remove("hidden");
         document.getElementById("batchSelectionUI").classList.remove("hidden");
         const batchSelect = document.getElementById("batchSelectFilter");
+        if (!batchSelect) return;
+
         batchSelect.innerHTML = `<option value="" disabled selected>Loading batches...</option>`;
         try {
           const batchRes = await fetch(
@@ -766,56 +793,78 @@
         }
       }
 
-      document
-        .getElementById("showTimetableBtn")
-        .addEventListener("click", async () => {
+      const showTimetableBtn = document.getElementById("showTimetableBtn");
+      if (showTimetableBtn) {
+        showTimetableBtn.addEventListener("click", async () => {
           const batchSelect = document.getElementById("batchSelectFilter");
-          if (batchSelect.selectedIndex < 0 || !batchSelect.value) {
-            SmartAlert(
-              "warning",
-              "Select Batch",
-              "Please select a batch first.",
-            );
+          if (batchSelect.selectedIndex <= 0 || !batchSelect.value) {
+            alert("Please select a batch first.");
             return;
           }
 
           const selectedOption = batchSelect.options[batchSelect.selectedIndex];
           const batchName = selectedOption.getAttribute("data-batchname");
+          const batchId = parseInt(batchSelect.value);
+
+          // THE FIX: Always fetch the most recent data from the DB so Recommendations are never stale!
+          if (!isDraftMode) {
+            const tableRes = await fetch(
+              `${API_URL}/view-timetable/?department_id=${CURRENT_DEPT_ID}`,
+            );
+            allSchedules = (await tableRes.json()).data;
+          }
+
           renderGrid(batchName);
 
-          // Fetch Analysis for Normal Mode
-          try {
-            const batchId = batchSelect.value;
-            const response = await fetch(
-              `${API_URL}/analyze-timetable/${batchId}`,
+          if (isDraftMode) {
+            const draftOptions = JSON.parse(
+              sessionStorage.getItem("draftOptions"),
             );
-            const result = await response.json();
-            if (result.success) {
-              currentAnalysisData = result.analysis;
+            const activeOpt =
+              draftOptions[window.currentlySelectedDraftIndex || 0];
+            if (activeOpt.analyses && activeOpt.analyses[batchId]) {
+              currentAnalysisData = activeOpt.analyses[batchId];
               document
                 .getElementById("viewAnalysisBtn")
                 .classList.remove("hidden");
-              document.getElementById("viewAnalysisBtn").onclick = () => {
-                document
+              if (
+                !document
                   .getElementById("analysisReportContainer")
-                  .classList.remove("hidden");
+                  .classList.contains("hidden")
+              ) {
                 renderAnalysisUI();
-                document
-                  .getElementById("analysisReportContainer")
-                  .scrollIntoView({ behavior: "smooth" });
-              };
+              }
             }
-          } catch (e) {
-            console.error("No analysis available.");
+          } else {
+            try {
+              const response = await fetch(
+                `${API_URL}/analyze-timetable/${batchId}`,
+              );
+              const result = await response.json();
+              if (result.success) {
+                currentAnalysisData = result.analysis;
+                document
+                  .getElementById("viewAnalysisBtn")
+                  .classList.remove("hidden");
+                if (
+                  !document
+                    .getElementById("analysisReportContainer")
+                    .classList.contains("hidden")
+                ) {
+                  renderAnalysisUI();
+                }
+              }
+            } catch (e) {
+              console.error("No analysis available.");
+            }
           }
         });
+      }
 
-      // --- RENDERING ANALYSIS REPORT ---
+      // --- RENDERING ---
       function renderAnalysisUI() {
         if (!currentAnalysisData) return;
         const data = currentAnalysisData;
-
-        // 1. Summary
         const sGrid = document.getElementById("analysisMetricsGrid");
         sGrid.innerHTML = `
             <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Required</p><p class="text-2xl text-primary font-bold">${data.total_req}</p></div>
@@ -824,67 +873,38 @@
             <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Completion</p><p class="text-2xl ${data.comp_rate < 100 ? "text-[#b38000]" : "text-primary"} font-bold">${data.comp_rate}%</p></div>
             <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Score</p><p class="text-2xl text-primary font-bold">${data.score}/100</p></div>
           `;
-
-        // 2. Missing
-        const mGrid = document.getElementById("analysisMissingGrid");
-        if (data.missing_breakdown.length === 0) {
-          mGrid.innerHTML = `<p class="text-primary italic">Perfect schedule. No missing sessions.</p>`;
-        } else {
-          mGrid.innerHTML = data.missing_breakdown
+        document.getElementById("analysisMissingGrid").innerHTML =
+          data.missing_breakdown.length === 0
+            ? `<p class="text-primary italic">Perfect schedule. No missing sessions.</p>`
+            : data.missing_breakdown
+                .map(
+                  (m) =>
+                    `<div class="p-3 bg-error-container rounded-lg border border-error"><div class="flex justify-between items-center mb-1"><span class="font-label-md font-bold text-error">${m.subject}</span> <span class="text-xs bg-error text-white px-2 py-0.5 rounded-md">${m.missing} Missing</span></div><p class="text-sm text-error opacity-80 italic">Root Cause: ${m.cause}</p></div>`,
+                )
+                .join("");
+        document.getElementById("analysisConstraintsGrid").innerHTML =
+          data.constraints
             .map(
-              (m) => `
-                  <div class="p-3 bg-error-container rounded-lg border border-error">
-                      <div class="flex justify-between items-center mb-1"><span class="font-label-md font-bold text-error">${m.subject}</span> <span class="text-xs bg-error text-white px-2 py-0.5 rounded-md">${m.missing} Missing</span></div>
-                      <p class="text-sm text-error opacity-80 italic">Root Cause: ${m.cause}</p>
-                  </div>
-              `,
+              (c) =>
+                `<div class="flex justify-between items-center border-b border-surface-variant py-2"><span class="text-sm font-label-md text-primary">${c.name}</span><span class="text-xs px-2 py-1 rounded border ${c.status === "Passed" ? "bg-tertiary-fixed border-primary text-primary" : "bg-error-container border-error text-error font-bold"}">${c.status}</span></div>`,
             )
             .join("");
-        }
-
-        // 3. Constraints
-        const cGrid = document.getElementById("analysisConstraintsGrid");
-        cGrid.innerHTML = data.constraints
-          .map(
-            (c) => `
-              <div class="flex justify-between items-center border-b border-surface-variant py-2">
-                  <span class="text-sm font-label-md text-primary">${c.name}</span>
-                  <span class="text-xs px-2 py-1 rounded border ${c.status === "Passed" ? "bg-tertiary-fixed border-primary text-primary" : "bg-error-container border-error text-error font-bold"}">${c.status}</span>
-              </div>
-          `,
-          )
-          .join("");
-
-        // 4. Smart Slots
-        const ssGrid = document.getElementById("analysisSmartSlots");
-        if (data.smart_recommendations.length === 0) {
-          ssGrid.innerHTML = `<p class="text-primary italic text-sm">No alternative slots available based on current workload.</p>`;
-        } else {
-          ssGrid.innerHTML = data.smart_recommendations
+        document.getElementById("analysisSmartSlots").innerHTML =
+          data.smart_recommendations.length === 0
+            ? `<p class="text-primary italic text-sm">No alternative slots available.</p>`
+            : data.smart_recommendations
+                .map(
+                  (s, index) =>
+                    `<div id="rec-card-${index}" class="group relative p-3 border border-outline-variant rounded-lg bg-surface flex flex-col hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden cursor-pointer" onclick="applySmartRecommendation(${index})"><div class="flex justify-between font-bold text-sm text-primary mb-1"><span>${s.subject}</span><span>${s.day} @ ${s.time.split(" - ")[0]}</span></div><div class="flex justify-between text-xs text-on-surface-variant mb-2"><span>${s.faculty}</span><span>${s.room}</span></div><span class="text-[10px] bg-secondary-container text-secondary px-2 py-1 rounded self-start">${s.reason}</span><div class="absolute inset-0 bg-primary/95 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-[1px]"><span class="text-white font-label-md font-bold flex items-center gap-2"><span class="material-symbols-outlined text-xl text-[#FFE194]">auto_awesome</span> Click to Apply</span></div></div>`,
+                )
+                .join("");
+        document.getElementById("analysisOptGrid").innerHTML =
+          data.optimization_suggestions
             .map(
-              (s) => `
-                  <div class="p-3 border border-outline-variant rounded-lg bg-surface flex flex-col">
-                      <div class="flex justify-between font-bold text-sm text-primary mb-1"><span>${s.subject}</span><span>${s.day} @ ${s.time.split(" - ")[0]}</span></div>
-                      <div class="flex justify-between text-xs text-on-surface-variant mb-2"><span>${s.faculty}</span><span>${s.room}</span></div>
-                      <span class="text-[10px] bg-secondary-container text-secondary px-2 py-1 rounded self-start">${s.reason}</span>
-                  </div>
-              `,
+              (o) =>
+                `<div class="p-3 bg-surface text-primary rounded-lg border border-outline-variant flex items-center justify-between"><span class="text-sm font-label-md">${o.text}</span><span class="text-xs font-bold text-tertiary-container bg-tertiary-fixed px-2 py-1 rounded-md border border-tertiary-container">${o.impact}</span></div>`,
             )
             .join("");
-        }
-
-        // 5. Opt Suggestions
-        const optGrid = document.getElementById("analysisOptGrid");
-        optGrid.innerHTML = data.optimization_suggestions
-          .map(
-            (o) => `
-              <div class="p-3 bg-surface text-primary rounded-lg border border-outline-variant flex items-center justify-between">
-                  <span class="text-sm font-label-md">${o.text}</span>
-                  <span class="text-xs font-bold text-tertiary-container bg-tertiary-fixed px-2 py-1 rounded-md border border-tertiary-container">${o.impact}</span>
-              </div>
-          `,
-          )
-          .join("");
       }
 
       function renderGrid(batchName) {
@@ -894,7 +914,7 @@
         );
 
         if (batchSchedules.length === 0) {
-          gridContainer.innerHTML = `<div class="flex flex-col items-center justify-center p-16 text-error w-full h-full mt-10"><span class="material-symbols-outlined text-[64px] mb-4 opacity-50">warning</span><p class="font-headline-md text-xl">No Timetable Found</p><p class="font-label-md mt-2 text-on-surface-variant">There are no classes scheduled for <strong>${batchName}</strong>.</p></div>`;
+          gridContainer.innerHTML = `<div class="flex flex-col items-center justify-center p-16 text-error w-full h-full mt-10"><span class="material-symbols-outlined text-[64px] mb-4 opacity-50">warning</span><h3 class="font-display-lg text-2xl text-primary">No Classes Scheduled</h3><p class="font-label-md mt-2 text-on-surface-variant max-w-md text-center">The AI could not schedule any classes for <strong>${batchName}</strong> under these strict constraints. <br><br>Click the <strong>'View Analysis'</strong> button in the top right to see exactly which rules or room limits prevented allocation.</p></div>`;
           document
             .getElementById("savedTimetableActionBar")
             .classList.add("hidden");
@@ -902,45 +922,37 @@
         }
 
         const actionBar = document.getElementById("savedTimetableActionBar");
-        const noteDisplay = document.getElementById("displayTimetableNote");
-        const deleteBtn = document.getElementById("deleteTimetableBtn");
-
         if (isDraftMode) {
           actionBar.classList.add("hidden");
         } else {
           actionBar.classList.remove("hidden");
-          noteDisplay.innerText =
-            batchSchedules[0].notes || "No notes provided for this timetable.";
-          deleteBtn.onclick = function () {
-            const batchSelect = document.getElementById("batchSelectFilter");
-            const actualBatchId = parseInt(batchSelect.value);
-            if (!actualBatchId) {
-              SmartAlert("error", "Error", "Could not detect Batch ID.");
-              return;
-            }
-            window.deleteSavedTimetable(actualBatchId);
+          document.getElementById("displayTimetableNote").innerText =
+            batchSchedules[0].notes || "No notes provided.";
+          document.getElementById("deleteTimetableBtn").onclick = function () {
+            window.deleteSavedTimetable(
+              parseInt(document.getElementById("batchSelectFilter").value),
+            );
           };
         }
 
         const SHIFT_SLOTS = [
           ...new Set(batchSchedules.map((s) => s.timeslot)),
-        ].sort((a, b) => {
-          const timeA = a.split(" - ")[0];
-          const timeB = b.split(" - ")[0];
-          return (
-            new Date(`1970/01/01 ${timeA}`) - new Date(`1970/01/01 ${timeB}`)
-          );
-        });
-
+        ].sort(
+          (a, b) =>
+            new Date(`1970/01/01 ${a.split(" - ")[0]}`) -
+            new Date(`1970/01/01 ${b.split(" - ")[0]}`),
+        );
         let gapFound = null;
-        const ONE_HOUR_MS = 3600000;
         for (let i = 0; i < SHIFT_SLOTS.length - 1; i++) {
-          const currentEnd = SHIFT_SLOTS[i].split(" - ")[1].trim();
-          const nextStart = SHIFT_SLOTS[i + 1].split(" - ")[0].trim();
-          const diff =
-            new Date(`1970/01/01 ${nextStart}`) -
-            new Date(`1970/01/01 ${currentEnd}`);
-          if (diff === ONE_HOUR_MS) {
+          if (
+            new Date(
+              `1970/01/01 ${SHIFT_SLOTS[i + 1].split(" - ")[0].trim()}`,
+            ) -
+              new Date(
+                `1970/01/01 ${SHIFT_SLOTS[i].split(" - ")[1].trim()}`,
+              ) ===
+            3600000
+          ) {
             gapFound = { start: SHIFT_SLOTS[i], end: SHIFT_SLOTS[i + 1] };
             break;
           }
@@ -952,7 +964,6 @@
           if (slot === gapFound?.end) {
             html += `<div class="timetable-grid time-row" style="min-height: 80px"><div class="text-right pr-4 py-4 font-label-sm text-on-surface-variant border-r-2 border-primary bg-surface-bright flex items-center justify-end">--:--</div><div class="border-r-2 border-surface-variant border-dashed bg-surface-container-lowest flex items-center justify-center col-span-5 border-y-2 border-surface-variant"><span class="font-label-sm text-on-surface-variant tracking-widest uppercase">Break Period</span></div></div>`;
           }
-
           const displaySlot = slot.replace(/AM|PM/g, "");
           let rowHtml = `<div class="timetable-grid time-row"><div class="text-right pr-4 py-4 font-label-sm text-on-surface-variant border-r-2 border-primary bg-surface-bright flex flex-col justify-center"><span class="font-bold text-primary">${displaySlot.split("-")[0].trim()}</span><span class="text-[10px] opacity-70">${displaySlot.split("-")[1].trim()}</span></div>`;
 
@@ -961,7 +972,6 @@
             const classData = batchSchedules.find(
               (s) => s.day_of_week === dayStr && s.timeslot === slot,
             );
-
             if (classData) {
               const bgColor = classData.room.includes("ROOM")
                 ? "bg-tertiary-fixed"
@@ -971,17 +981,14 @@
               rowHtml += `<div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200" data-day="${dayStr}" data-time="${slot}" ondragover="handleDragOver(event)" ondrop="handleDrop(event, '${dayStr}', '${slot}')"></div>`;
             }
           }
-          rowHtml += `</div>`;
-          html += rowHtml;
+          html += rowHtml + `</div>`;
         });
-
         gridContainer.innerHTML = html;
       }
 
       function handleDragOver(event) {
         event.preventDefault();
       }
-
       function handleDragStart(
         event,
         batch_id,
@@ -999,12 +1006,10 @@
         };
         draggedHtmlElement = event.target;
         event.target.classList.add("opacity-50", "scale-95", "shadow-xl");
-
         document.querySelectorAll(".drop-zone").forEach((zone) => {
           const zoneDay = zone.getAttribute("data-day");
           const zoneTime = zone.getAttribute("data-time");
           if (zoneDay === currentDay && zoneTime === currentTime) return;
-
           const isConflict = allSchedules.some(
             (s) =>
               s.day_of_week === zoneDay &&
@@ -1032,13 +1037,12 @@
       }
 
       document.addEventListener("dragend", () => {
-        if (draggedHtmlElement) {
+        if (draggedHtmlElement)
           draggedHtmlElement.classList.remove(
             "opacity-50",
             "scale-95",
             "shadow-xl",
           );
-        }
         document.querySelectorAll(".drop-zone").forEach((zone) => {
           zone.classList.remove(
             "bg-red-50",
@@ -1057,18 +1061,12 @@
         if (!draggedHtmlElement) return;
         let dropZone = event.target.closest(".drop-zone");
         if (!dropZone) return;
-
-        const isConflict = dropZone.getAttribute("data-conflict") === "true";
-        if (isConflict) {
-          SmartAlert(
-            "error",
-            "Conflict!",
-            "Professor or Room is busy at this time.",
-          );
+        if (dropZone.getAttribute("data-conflict") === "true") {
+          alert("Conflict! Professor or Room is busy at this time.");
           return;
         }
-
         const recordId = draggedHtmlElement.id.split("_")[1];
+
         if (!isDraftMode) {
           try {
             draggedHtmlElement.style.opacity = "0.5";
@@ -1082,18 +1080,13 @@
               }),
             });
             const result = await response.json();
-            if (!response.ok) {
-              SmartAlert("error", "Error", result.detail || result.message);
-              draggedHtmlElement.style.opacity = "1";
-              return;
-            }
-            if (result.success === false) {
-              SmartAlert("error", "Error", result.message);
+            if (!response.ok || result.success === false) {
+              alert("Error: " + (result.detail || result.message));
               draggedHtmlElement.style.opacity = "1";
               return;
             }
           } catch (e) {
-            SmartAlert("error", "Error", "Network error.");
+            alert("Network error.");
             draggedHtmlElement.style.opacity = "1";
             return;
           }
@@ -1101,19 +1094,241 @@
 
         dropZone.appendChild(draggedHtmlElement);
         draggedHtmlElement.style.opacity = "1";
-
         const recordToUpdate = allSchedules.find((s) => s.id == recordId);
         if (recordToUpdate) {
           recordToUpdate.day_of_week = newDay;
           recordToUpdate.timeslot = newTimeSlot;
         }
-
         draggedHtmlElement.classList.add("ring-4", "ring-green-500");
         setTimeout(
           () => draggedHtmlElement.classList.remove("ring-4", "ring-green-500"),
           1000,
         );
       }
+
+      // =========================================================
+      // THE FIX: SYNCHRONIZED RECOMMENDATION ENGINE
+      // =========================================================
+      window.applySmartRecommendation = async function (index) {
+        if (!currentAnalysisData) return;
+        const rec = currentAnalysisData.smart_recommendations[index];
+        const card = document.getElementById(`rec-card-${index}`);
+        const select = document.getElementById("batchSelectFilter");
+        const batchId = parseInt(select.value);
+        const batchName =
+          select.options[select.selectedIndex].getAttribute("data-batchname");
+
+        // SAFETY CHECK 1: Is this Batch already taking a class right now?
+        const batchConflict = allSchedules.some(
+          (s) =>
+            s.batch_id === batchId &&
+            s.day_of_week === rec.day &&
+            s.timeslot === rec.time,
+        );
+        if (batchConflict) {
+          alert(
+            "This Batch already has a class scheduled at this time. Please refresh to get new recommendations.",
+          );
+          if (!isDraftMode) document.getElementById("showTimetableBtn").click();
+          return;
+        }
+
+        // SAFETY CHECK 2: Is the Room or Faculty taken?
+        const resourceConflict = allSchedules.some(
+          (s) =>
+            s.day_of_week === rec.day &&
+            s.timeslot === rec.time &&
+            (s.room_id === rec.room_id || s.faculty_id === rec.faculty_id),
+        );
+        if (resourceConflict) {
+          alert(
+            "The Room or Faculty is no longer available. Please refresh to get new recommendations.",
+          );
+          if (!isDraftMode) document.getElementById("showTimetableBtn").click();
+          return;
+        }
+
+        // Dim the clicked card immediately for UI feedback
+        card.style.opacity = "0.5";
+        card.style.pointerEvents = "none";
+
+        if (isDraftMode) {
+          // --- DRAFT MODE (Memory Only) ---
+          const newRecord = {
+            id: "temp_" + Date.now(),
+            batch_id: batchId,
+            department_id: CURRENT_DEPT_ID,
+            faculty_id: rec.faculty_id,
+            room_id: rec.room_id,
+            subject_id: rec.subject_id,
+            day_of_week: rec.day,
+            timeslot: rec.time,
+            faculty: rec.faculty,
+            subject: rec.subject,
+            room: rec.room,
+            batch: batchName,
+          };
+          allSchedules.push(newRecord);
+
+          const draftOptions = JSON.parse(
+            sessionStorage.getItem("draftOptions"),
+          );
+          draftOptions[window.currentlySelectedDraftIndex || 0].records.push(
+            newRecord,
+          );
+          sessionStorage.setItem("draftOptions", JSON.stringify(draftOptions));
+
+          // Manually remove it from the UI list and recalculate
+          currentAnalysisData.smart_recommendations.splice(index, 1);
+          currentAnalysisData.total_sched += 1;
+          currentAnalysisData.total_missing = Math.max(
+            0,
+            currentAnalysisData.total_missing - 1,
+          );
+          currentAnalysisData.comp_rate = Math.round(
+            (currentAnalysisData.total_sched / currentAnalysisData.total_req) *
+              100,
+          );
+          currentAnalysisData.score = currentAnalysisData.comp_rate;
+
+          const missingItem = currentAnalysisData.missing_breakdown.find(
+            (m) => m.subject === rec.subject,
+          );
+          if (missingItem) {
+            missingItem.missing -= 1;
+            if (missingItem.missing <= 0) {
+              currentAnalysisData.missing_breakdown =
+                currentAnalysisData.missing_breakdown.filter(
+                  (m) => m.subject !== rec.subject,
+                );
+            }
+          }
+
+          renderAnalysisUI();
+          renderGrid(batchName);
+
+          // Apply the Green Highlight after rendering
+          setTimeout(() => {
+            const dropZone = document.querySelector(
+              `.drop-zone[data-day="${rec.day}"][data-time="${rec.time}"]`,
+            );
+            if (dropZone) {
+              const newCardEl = dropZone.querySelector(".schedule-card");
+              if (newCardEl) {
+                newCardEl.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+                newCardEl.classList.add(
+                  "ring-4",
+                  "ring-green-500",
+                  "scale-105",
+                  "transition-all",
+                  "duration-300",
+                );
+                setTimeout(
+                  () =>
+                    newCardEl.classList.remove(
+                      "ring-4",
+                      "ring-green-500",
+                      "scale-105",
+                    ),
+                  1500,
+                );
+              }
+            }
+          }, 100);
+        } else {
+          // --- LIVE MODE (Database Sync) ---
+          const newRecord = {
+            id: "temp_" + Date.now(),
+            batch_id: batchId,
+            department_id: CURRENT_DEPT_ID,
+            faculty_id: rec.faculty_id,
+            room_id: rec.room_id,
+            subject_id: rec.subject_id,
+            day_of_week: rec.day,
+            timeslot: rec.time,
+            faculty: rec.faculty,
+            subject: rec.subject,
+            room: rec.room,
+            batch: batchName,
+          };
+          const tempSchedules = [...allSchedules, newRecord];
+
+          try {
+            // 1. Save it to Python
+            const response = await fetch(`${API_URL}/save-timetable/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                records: tempSchedules,
+                notes: tempSchedules[0]?.notes || "",
+              }),
+            });
+            const result = await response.json();
+
+            if (!result.success) {
+              alert("Database Save Error: " + result.message);
+              card.style.opacity = "1";
+              card.style.pointerEvents = "auto";
+              return;
+            }
+
+            // 2. FETCH FRESH DATA (This guarantees the recommendation vanishes!)
+            const tableRes = await fetch(
+              `${API_URL}/view-timetable/?department_id=${CURRENT_DEPT_ID}`,
+            );
+            allSchedules = (await tableRes.json()).data;
+
+            const analysisRes = await fetch(
+              `${API_URL}/analyze-timetable/${batchId}`,
+            );
+            currentAnalysisData = (await analysisRes.json()).analysis;
+
+            // 3. Render the fresh, updated UI
+            renderAnalysisUI();
+            renderGrid(batchName);
+
+            // 4. Locate the newly rendered box using Day/Time coordinates and HIGHLIGHT IT!
+            setTimeout(() => {
+              const dropZone = document.querySelector(
+                `.drop-zone[data-day="${rec.day}"][data-time="${rec.time}"]`,
+              );
+              if (dropZone) {
+                const newCardEl = dropZone.querySelector(".schedule-card");
+                if (newCardEl) {
+                  newCardEl.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                  });
+                  newCardEl.classList.add(
+                    "ring-4",
+                    "ring-green-500",
+                    "scale-105",
+                    "transition-all",
+                    "duration-300",
+                  );
+                  setTimeout(
+                    () =>
+                      newCardEl.classList.remove(
+                        "ring-4",
+                        "ring-green-500",
+                        "scale-105",
+                      ),
+                    1500,
+                  );
+                }
+              }
+            }, 100);
+          } catch (e) {
+            alert("Network Error.");
+            card.style.opacity = "1";
+            card.style.pointerEvents = "auto";
+            return;
+          }
+        }
+      };
     </script>
   </body>
 </html>

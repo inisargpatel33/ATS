@@ -574,8 +574,11 @@
 
       document.addEventListener("DOMContentLoaded", async () => {
         const deptDropdown = document.getElementById("facultyDept");
-        const scopeSelect = document.getElementById("target-scope"); // This is the Batch Dropdown
+        const scopeSelect = document.getElementById("target-scope"); 
         const generateBtn = document.getElementById("generate-btn");
+
+        // CRASH GUARD: If we aren't on the Scheduler page, stop here!
+        if (!deptDropdown || !scopeSelect || !generateBtn) return;
 
         // 1. Fetch Dynamic Departments
         try {
@@ -585,27 +588,19 @@
             deptDropdown.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
           });
         } catch (err) {
-          console.error("Failed to load departments for dropdown");
+          console.error("Failed to load departments");
         }
 
-        // Listen for whenever the user changes the department
+        // 2. Listen for Department Change
         deptDropdown.addEventListener("change", async function () {
           const selectedDeptId = this.value;
-
-          // Clear out the old batches and show a loading state
           scopeSelect.innerHTML = `<option value="" disabled selected>Loading batches...</option>`;
 
           try {
-            // Fetch batches ONLY for the selected department
-            const response = await fetch(
-              `${API_URL}/get-batches/${selectedDeptId}`,
-            );
+            const response = await fetch(`${API_URL}/get-batches/${selectedDeptId}`);
             const result = await response.json();
 
-            // Clear the loading text
             scopeSelect.innerHTML = `<option value="all">Entire Department</option>`;
-
-            // Check if the department actually has batches
             if (result.data && result.data.length > 0) {
               result.data.forEach((batch) => {
                 scopeSelect.innerHTML += `<option value="${batch.id}">${batch.name}</option>`;
@@ -614,27 +609,25 @@
               scopeSelect.innerHTML = `<option value="" disabled selected>No batches in this department</option>`;
             }
           } catch (error) {
-            console.error("Failed to fetch batches:", error);
             scopeSelect.innerHTML = `<option value="" disabled selected>Error loading batches</option>`;
           }
         });
 
+        // 3. Time Config Modal Logic
         const timeModal = document.getElementById("timeConfigModal");
-        const timeModalContent = document.getElementById(
-          "timeConfigModalContent",
-        );
+        const timeModalContent = document.getElementById("timeConfigModalContent");
+        let batchConfig = { start: 8, end: 16, break: 12 };
 
-        let batchConfig = { start: 8, end: 16, break: 12 }; // Default values
-
-        document
-          .getElementById("openTimeConfigBtn")
-          .addEventListener("click", () => {
-            timeModal.classList.remove("hidden");
-            setTimeout(() => {
-              timeModal.classList.remove("opacity-0");
-              timeModalContent.classList.remove("scale-95");
-            }, 10);
-          });
+        const openTimeBtn = document.getElementById("openTimeConfigBtn");
+        if(openTimeBtn) {
+            openTimeBtn.addEventListener("click", () => {
+                timeModal.classList.remove("hidden");
+                setTimeout(() => {
+                  timeModal.classList.remove("opacity-0");
+                  timeModalContent.classList.remove("scale-95");
+                }, 10);
+            });
+        }
 
         const closeTimeModal = () => {
           timeModal.classList.add("opacity-0");
@@ -642,47 +635,31 @@
           setTimeout(() => timeModal.classList.add("hidden"), 300);
         };
 
-        document
-          .getElementById("closeTimeConfigBtn")
-          .addEventListener("click", closeTimeModal);
+        const closeTimeBtn = document.getElementById("closeTimeConfigBtn");
+        if(closeTimeBtn) closeTimeBtn.addEventListener("click", closeTimeModal);
 
-        document
-          .getElementById("saveTimeConfigBtn")
-          .addEventListener("click", () => {
-            batchConfig.start = parseInt(
-              document.getElementById("customStartTime").value,
-            );
-            batchConfig.end = parseInt(
-              document.getElementById("customEndTime").value,
-            );
-            batchConfig.break = parseInt(
-              document.getElementById("customBreakTime").value,
-            );
-            closeTimeModal();
-            alert("Custom timings saved for generation.");
-          });
+        const saveTimeBtn = document.getElementById("saveTimeConfigBtn");
+        if(saveTimeBtn) {
+            saveTimeBtn.addEventListener("click", () => {
+                batchConfig.start = parseInt(document.getElementById("customStartTime").value);
+                batchConfig.end = parseInt(document.getElementById("customEndTime").value);
+                batchConfig.break = parseInt(document.getElementById("customBreakTime").value);
+                closeTimeModal();
+                alert("Custom timings saved for generation."); 
+            });
+        }
 
-        // 2. Generation Engine Trigger
-        if (generateBtn) {
-          generateBtn.addEventListener("click", async function () {
+        // 4. THE ONLY GENERATION TRIGGER
+        generateBtn.addEventListener("click", async function () {
             const departmentId = deptDropdown.value;
-
-            // ---> THE FIX: We must grab the selected Batch ID! <---
             const batchId = scopeSelect.value;
 
             if (departmentId === "global" || !departmentId) {
-              alert(
-                "Please select a specific department to prevent server overload.",
-              );
-              return;
+              alert("Please select a specific department."); return;
             }
 
-            // Grab all checked constraints
-            const checkedConstraints = Array.from(
-              document.querySelectorAll(".rule-checkbox:checked"),
-            ).map((cb) => cb.value);
+            const checkedConstraints = Array.from(document.querySelectorAll(".rule-checkbox:checked")).map((cb) => cb.value);
 
-            // UX: Change button to Crunching Math state
             const originalContent = this.innerHTML;
             this.innerHTML = `
               <div class="absolute inset-0 bg-white opacity-20 transition-opacity"></div>
@@ -691,82 +668,32 @@
             `;
             this.disabled = true;
 
-            // API Call to Python Solver
             try {
-              const response = await fetch(
-                `${API_URL}/generate-timetable/${departmentId}`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
+              const response = await fetch(`${API_URL}/generate-timetable/${departmentId}`, {
+                  method: "POST", headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    constraints: checkedConstraints,
-                    batch_id: batchId,
-                    start_hour: batchConfig.start,
-                    end_hour: batchConfig.end,
-                    break_hour: batchConfig.break,
+                    constraints: checkedConstraints, batch_id: batchId,
+                    start_hour: batchConfig.start, end_hour: batchConfig.end, break_hour: batchConfig.break,
                   }),
-                },
-              );
+              });
 
               const data = await response.json();
 
               if (data.success) {
-                alert(`Engine Success! Redirecting to Draft Review...`);
-                // Save ALL 3 OPTIONS to browser memory
-                sessionStorage.setItem(
-                  "draftOptions",
-                  JSON.stringify(data.draft_options),
-                );
+                sessionStorage.setItem("draftOptions", JSON.stringify(data.draft_options));
                 sessionStorage.setItem("draftBatchId", batchId);
                 sessionStorage.setItem("draftDeptId", departmentId);
-
-                // Redirect with draft=true
                 window.location.href = `timetable.html?draft=true`;
               } else {
-                alert("Engine Failed: " + data.message);
+                alert("Optimization Failed: " + data.message);
+                this.innerHTML = originalContent; this.disabled = false;
               }
             } catch (error) {
-              alert(
-                "Could not connect to the Python server. Ensure Uvicorn is running.",
-              );
-            } finally {
-              this.innerHTML = originalContent;
-              this.disabled = false;
-            }
-          });
-        }
+              alert("Server Error: Could not connect to Python.");
+              this.innerHTML = originalContent; this.disabled = false;
+            } 
+        });
       });
-           
-    
-                  async function startGeneration() {
-                      document.getElementById("loadingOverlay").classList.remove("hidden");
-                      document.getElementById("loadingMessage").innerText = "Crunching the numbers. This may take up to 10 seconds...";
-
-                      try {
-                          const response = await fetch(`${API_URL}/generate-timetable/${CURRENT_DEPT_ID}`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify(requestData)
-                          });
-                          
-                          const data = await response.json();
-                          document.getElementById("loadingOverlay").classList.add("hidden");
-
-                          if (data.success) {
-                              // Success! Slide in a green toast and render data.
-                              SmartAlert("success", "Timetables Generated", data.message);
-                              renderDraftOptions(data.draft_options);
-                          } else {
-                              // Math Error! Slide in a red toast detailing the capacity issue.
-                              SmartAlert("error", "Optimization Failed", data.message);
-                          }
-                          
-                      } catch (error) {
-                          document.getElementById("loadingOverlay").classList.add("hidden");
-                          // Server crash alert
-                          SmartAlert("error", "Server Error", "Backend is unreachable. Please ensure Python is running.");
-                      }
-                  }
     </script>
-  </body>
+    </body>
 </html>

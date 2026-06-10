@@ -324,14 +324,16 @@ def get_expertise(faculty_id: int):
         cursor.execute("SELECT subject_id AS id, competency_tier FROM faculty_expertise WHERE faculty_id = %s", (faculty_id,))
         return {"data": cursor.fetchall()}
     finally: cursor.close(); release_db_connection(conn)
-
+    
+    
 # =========================================================
-# AI ANALYSIS ENGINE HELPER (NEW!)
+# AI ANALYSIS ENGINE HELPER
 # =========================================================
 def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic_slots, exp_map, all_dept_records):
+    from collections import defaultdict
     faculty_usage = defaultdict(int)
     room_usage = defaultdict(int)
-    faculty_schedule = set()
+    faculty_schedule = set() 
     room_schedule = set()
     batch_schedule = set()
 
@@ -382,8 +384,8 @@ def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic
                 if overloaded:
                     cause = "Faculty weekly workload limit reached."
                 else:
-                    req_type = "Laboratory" if s["subject_type"] == "Practical" else "Lecture Hall"
-                    valid_rooms = [r for r in rooms if r["room_type"] == req_type or (req_type=="Lecture Hall" and r["room_type"]!="Laboratory")]
+                    req_type = "Laboratory" if s["subject_type"] == "Practical" else "Lecture Hall/Seminar Room"
+                    valid_rooms = [r for r in rooms if r["room_type"] == req_type or (req_type=="Lecture Hall/Seminar Room" and r["room_type"]!="Laboratory")]
                     if not valid_rooms: cause = f"No '{req_type}' available in department."
                     else: cause = "Scheduling rules prevented allocation (No common free slots)."
 
@@ -406,7 +408,7 @@ def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic
                             break
 
                     if free_fac:
-                        req_type = "Laboratory" if s["subject_type"] == "Practical" else "Lecture Hall"
+                        req_type = "Laboratory" if s["subject_type"] == "Practical" else "Lecture Hall/Seminar Room"
                         free_room = None
                         for r in rooms:
                             if r["room_type"] == "Laboratory" and req_type != "Laboratory": continue
@@ -418,7 +420,10 @@ def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic
                         if free_room:
                             smart_recommendations.append({
                                 "day": day, "time": slot, "room": room_dict[free_room]['name'],
-                                "faculty": fac_dict[free_fac]['name'], "subject": s['name'], "reason": "Faculty, Room, and Batch are all free."
+                                "faculty": fac_dict[free_fac]['name'], "subject": s['name'], 
+                                "reason": "Faculty, Room, and Batch are all free.",
+                                # ---> THE FIX: EXPLICITLY SEND THE IDs SO THE FRONTEND CAN SAVE THE CLASS <---
+                                "faculty_id": free_fac, "room_id": free_room, "subject_id": s['id']
                             })
                             recs_found += 1
 
@@ -446,7 +451,9 @@ def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic
             {"name": "Lab Consecutive Rule", "status": "Passed"}
         ]
     }
-
+# =========================================================
+# TIMETABLE GENERATION (MASTER ENGINE)
+# =========================================================
 # =========================================================
 # TIMETABLE GENERATION (MASTER ENGINE)
 # =========================================================
@@ -473,14 +480,19 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
         cursor.execute("SELECT * FROM rooms WHERE is_active = TRUE")
         rooms = cursor.fetchall()
 
+        # THE FIX: Global University-Wide Booking Conflict Resolution
         if payload.batch_id != "all":
             cursor.execute("""
                 SELECT batch_id, faculty_id, room_id, day_of_week, timeslot
-                FROM timetables WHERE batch_id != %s AND department_id = %s
-            """, (int(payload.batch_id), department_id))
+                FROM timetables WHERE batch_id != %s
+            """, (int(payload.batch_id),))
             existing_bookings = cursor.fetchall()
         else:
-            existing_bookings = []
+            cursor.execute("""
+                SELECT batch_id, faculty_id, room_id, day_of_week, timeslot
+                FROM timetables WHERE department_id != %s
+            """, (department_id,))
+            existing_bookings = cursor.fetchall()
 
         cursor.execute("""
             SELECT fe.faculty_id, fe.subject_id, fe.competency_tier
@@ -580,7 +592,6 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
 
             objective_terms = []
 
-            # --- SESSIONS & LAB STACKING (SOFT OPTIMIZATION) ---
             for batch in batches:
                 for subject in subjects:
                     if subject["semester"] != batch["semester"]: continue
@@ -616,32 +627,24 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                             for var in sub_vars: objective_terms.append(var * 10000)
                             
                     else:
-                        # =====================================================
-                        # THEORY CLASSES (SOFT OPTIMIZATION)
-                        # =====================================================
                         if sub_vars: 
                             model.Add(sum(sub_vars) <= req)
                             for var in sub_vars: objective_terms.append(var * 10000)
                         
-                        # THE FIX: Calculate max allowed per day to force an even spread
-                        # If a subject needs 4 sessions across 5 days, max_per_day = 1.
+                        import math
                         max_per_day = math.ceil(req / 5) 
-                        
                         for day in DAYS:
-                            # 1. Enforce Daily Limit (Prevents 3 classes on Monday!)
                             day_s_vars = []
                             for i in range(len(dynamic_slots)):
                                 day_s_vars.extend(batch_day_slot_sub.get((b_id, day, dynamic_slots[i], sub_id), []))
                             if day_s_vars:
                                 model.Add(sum(day_s_vars) <= max_per_day)
 
-                            # 2. Prevent consecutive (back-to-back) stacking
                             for i in range(len(dynamic_slots) - 1):
                                 s1_vars = batch_day_slot_sub.get((b_id, day, dynamic_slots[i], sub_id), [])
                                 s2_vars = batch_day_slot_sub.get((b_id, day, dynamic_slots[i+1], sub_id), [])
                                 if s1_vars and s2_vars: model.Add(sum(s1_vars) + sum(s2_vars) <= 1)
-                                
-                                
+
             for booking in existing_bookings:
                 d, t = booking["day_of_week"], booking["timeslot"]
                 for var in fac_day_slot.get((booking["faculty_id"], d, t), []): model.Add(var == 0)
@@ -650,31 +653,21 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
             for key, var in x.items():
                 score = int(exp_map[(key[0], key[1])] * scenario["w_exp"])
                 objective_terms.append(var * score)
-                
-            for key, var in x.items():
-                score = int(exp_map[(key[0], key[1])] * scenario["w_exp"])
-                objective_terms.append(var * score)
 
-            # =====================================================
-            # FIX: ENTERPRISE SOLUTION BANNING (FORCE DIVERGENCE)
-            # =====================================================
-            # If the engine already generated Option 1, we force it to change 
-            # at least 15% of the schedule for Option 2 and Option 3!
             for prev_keys in previous_solution_keys:
                 matching_vars = [x[k] for k in prev_keys if k in x]
                 if matching_vars:
-                    classes_to_move = max(2, len(matching_vars) // 6) # Force ~15% difference
+                    classes_to_move = max(2, len(matching_vars) // 6) 
                     model.Add(sum(matching_vars) <= len(matching_vars) - classes_to_move)
 
             model.Maximize(sum(objective_terms))
 
-            solver = cp_model.CpSolver()
-            solver.parameters.max_time_in_seconds = 5
+            all_vars = list(x.values())
+            if all_vars:
+                model.AddDecisionStrategy(all_vars, cp_model.CHOOSE_FIRST, cp_model.SELECT_MAX_VALUE)
 
-            model.Maximize(sum(objective_terms))
-
             solver = cp_model.CpSolver()
-            solver.parameters.max_time_in_seconds = 5
+            solver.parameters.max_time_in_seconds = 10 
             
             if "Balanced" in scenario["name"]: solver.parameters.random_seed = 1
             elif "Movement" in scenario["name"]: solver.parameters.random_seed = 42
@@ -696,7 +689,6 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
                         
                 previous_solution_keys.append(current_solution_keys)
                 
-                # RUN ANALYSIS FOR EACH BATCH IN THIS OPTION
                 batch_analyses = {}
                 for batch in batches:
                     b_id = batch["id"]
@@ -720,18 +712,40 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
 
 @app.post("/save-timetable/")
 def save_timetable(payload: SaveTimetableRequest):
-    conn = get_db_connection(); cursor = conn.cursor()
+    conn = get_db_connection()
+    cursor = conn.cursor()
     try:
-        if not payload.records: return {"success": False, "message": "No records to save."}
-        batch_id = payload.records[0].batch_id
-        cursor.execute("DELETE FROM timetables WHERE batch_id = %s", (batch_id,))
+        if not payload.records: 
+            return {"success": False, "message": "No records to save."}
+            
+        # Extract unique batch IDs from data payload
+        batch_ids = list(set(r.batch_id for r in payload.records))
+        
+        # Bulletproof clearing for single vs multiple items to prevent PostgreSQL syntax crashes
+        if len(batch_ids) == 1:
+            cursor.execute("DELETE FROM timetables WHERE batch_id = %s", (batch_ids[0],))
+        else:
+            cursor.execute("DELETE FROM timetables WHERE batch_id IN %s", (tuple(batch_ids),))
+        
         insert_data = [(r.department_id, r.day_of_week, r.timeslot, r.room_id, r.batch_id, r.subject_id, r.faculty_id, payload.notes) for r in payload.records]
-        cursor.executemany("INSERT INTO timetables (department_id, day_of_week, timeslot, room_id, batch_id, subject_id, faculty_id, notes) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", insert_data)
+        
+        cursor.executemany("""
+            INSERT INTO timetables 
+            (department_id, day_of_week, timeslot, room_id, batch_id, subject_id, faculty_id, notes) 
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """, insert_data)
+        
         conn.commit()
         return {"success": True, "message": "Timetable securely published to database."}
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
-    finally: cursor.close(); release_db_connection(conn)   
         
+    except Exception as e: 
+        conn.rollback()
+        print(f"DATABASE SAVE ERROR: {str(e)}") 
+        raise HTTPException(status_code=500, detail=str(e))
+    finally: 
+        cursor.close()
+        release_db_connection(conn)
+                        
 @app.post("/validate-swap/")
 def validate_timetable_swap(payload: SwapValidationRequest):
     conn = get_db_connection(); cursor = conn.cursor()
@@ -757,18 +771,33 @@ def update_timetable_slot(payload: UpdateSlotRequest):
 
 @app.get("/view-timetable/")
 def view_timetable(department_id: int = None, batch_id: int = None):
-    conn = get_db_connection(); cursor = conn.cursor()
+    conn = get_db_connection()
+    cursor = conn.cursor()
     try:
+        # THE FIX: Added t.department_id and t.subject_id so the frontend has them for saving!
         query = """
-            SELECT t.id, t.batch_id, t.faculty_id, t.room_id, t.notes, t.day_of_week, t.timeslot, b.name AS batch, s.name AS subject, r.name AS room, f.name AS faculty
-            FROM timetables t JOIN batches b ON t.batch_id = b.id JOIN subjects s ON t.subject_id = s.id JOIN rooms r ON t.room_id = r.id JOIN faculties f ON t.faculty_id = f.id WHERE 1=1
+            SELECT t.id, t.department_id, t.batch_id, t.subject_id, t.faculty_id, t.room_id, t.notes, t.day_of_week, t.timeslot, b.name AS batch, s.name AS subject, r.name AS room, f.name AS faculty
+            FROM timetables t 
+            JOIN batches b ON t.batch_id = b.id 
+            JOIN subjects s ON t.subject_id = s.id 
+            JOIN rooms r ON t.room_id = r.id 
+            JOIN faculties f ON t.faculty_id = f.id 
+            WHERE 1=1
         """
         params = []
-        if department_id: query += " AND t.department_id = %s"; params.append(department_id)
-        if batch_id: query += " AND t.batch_id = %s"; params.append(batch_id)
-        cursor.execute(query, tuple(params)); return {"success": True, "data": cursor.fetchall()}
-    finally: cursor.close(); release_db_connection(conn)
-        
+        if department_id: 
+            query += " AND t.department_id = %s"
+            params.append(department_id)
+        if batch_id: 
+            query += " AND t.batch_id = %s"
+            params.append(batch_id)
+            
+        cursor.execute(query, tuple(params))
+        return {"success": True, "data": cursor.fetchall()}
+    finally: 
+        cursor.close()
+        release_db_connection(conn)
+                
 @app.delete("/delete-timetable/{batch_id}")
 def delete_timetable(batch_id: int):
     conn = get_db_connection(); cursor = conn.cursor()
@@ -791,9 +820,10 @@ def analyze_published_timetable(batch_id: int):
         if not batch_info: raise HTTPException(404, "Batch not found")
         department_id = batch_info["department_id"]
 
-        cursor.execute("SELECT batch_id, faculty_id, room_id, day_of_week, timeslot FROM timetables WHERE department_id = %s", (department_id,))
+        # THE FIX: Remove 'WHERE department_id = %s' so it checks room availability across the WHOLE university!
+        cursor.execute("SELECT batch_id, faculty_id, room_id, day_of_week, timeslot FROM timetables")
         all_dept_records = cursor.fetchall()
-        
+
         cursor.execute("SELECT * FROM timetables WHERE batch_id = %s", (batch_id,))
         batch_records = cursor.fetchall()
 
@@ -810,7 +840,6 @@ def analyze_published_timetable(batch_id: int):
         expertise = cursor.fetchall()
         exp_map = {(exp["faculty_id"], exp["subject_id"]): float(exp["competency_tier"]) for exp in expertise}
 
-        # Mocking dynamic slots based on standard 8-4 setup with 12 break
         dynamic_slots = ["08:00 AM - 09:00 AM", "09:00 AM - 10:00 AM", "10:00 AM - 11:00 AM", "11:00 AM - 12:00 PM", "01:00 PM - 02:00 PM", "02:00 PM - 03:00 PM", "03:00 PM - 04:00 PM"]
 
         analysis = run_timtable_analysis(batch_id, batch_records, subjects, faculties, rooms, dynamic_slots, exp_map, all_dept_records)
@@ -820,7 +849,8 @@ def analyze_published_timetable(batch_id: int):
     finally:
         cursor.close()
         release_db_connection(conn)
-        
+
+
 @app.get("/dashboard-stats/global")
 def get_global_dashboard_stats():
     conn = get_db_connection(); cursor = conn.cursor()
