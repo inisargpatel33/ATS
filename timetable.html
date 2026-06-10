@@ -16,7 +16,6 @@
 
     <script id="tailwind-config">
       tailwind.config = {
-        darkMode: "class",
         theme: {
           extend: {
             colors: {
@@ -63,7 +62,6 @@
       .offset-shadow-sm {
         box-shadow: 4px 4px 0px 0px rgba(24, 25, 25, 1);
       }
-
       ::-webkit-scrollbar {
         height: 10px;
         width: 10px;
@@ -77,7 +75,6 @@
         border-radius: 6px;
         border: 2px solid #f1edec;
       }
-
       .timetable-grid {
         display: grid;
         grid-template-columns: 80px repeat(5, minmax(180px, 1fr));
@@ -174,7 +171,6 @@
             >SmartSched Uni</span
           >
         </div>
-
         <div class="flex items-center gap-3">
           <label class="font-label-sm text-primary font-bold hidden md:block"
             >Active Dept:</label
@@ -204,12 +200,10 @@
             Draft Mode: Select an optimization option below.
           </p>
         </div>
-
         <div
           id="draftOptionsContainer"
           class="flex gap-2 bg-white p-1 rounded-lg border-2 border-primary"
         ></div>
-
         <div class="flex gap-3 w-full md:w-auto">
           <button
             id="discardDraftBtn"
@@ -221,8 +215,8 @@
             id="openSaveModalBtn"
             class="w-full md:w-auto bg-primary text-on-primary px-6 py-2 rounded-md font-label-md offset-shadow-sm active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
           >
-            <span class="material-symbols-outlined text-[18px]">publish</span>
-            Publish
+            <span class="material-symbols-outlined text-[18px]">publish</span
+            >Publish
           </button>
         </div>
       </div>
@@ -237,14 +231,11 @@
           </h2>
           <div class="flex gap-3 w-full sm:w-auto">
             <button
-              class="bg-surface text-primary border-2 border-primary font-label-md px-4 py-2 rounded-lg shadow-[2px_2px_0px_0px_#181919] active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2"
+              id="viewAnalysisBtn"
+              class="hidden bg-secondary-container text-primary border-2 border-primary font-label-md px-4 py-2 rounded-lg shadow-[2px_2px_0px_0px_#181919] active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2"
             >
-              <span class="material-symbols-outlined">print</span> Print
-            </button>
-            <button
-              class="bg-primary text-on-primary font-label-md px-4 py-2 rounded-lg offset-shadow-sm active:translate-y-1 active:shadow-none transition-all flex items-center gap-2"
-            >
-              <span class="material-symbols-outlined">share</span> Export
+              <span class="material-symbols-outlined">analytics</span> View
+              Analysis
             </button>
           </div>
         </div>
@@ -268,7 +259,6 @@
               >expand_more</span
             >
           </div>
-
           <button
             id="showTimetableBtn"
             class="bg-primary text-on-primary font-label-md px-8 py-3 rounded-lg shadow-[3px_3px_0px_0px_#181919] active:translate-y-1 active:shadow-none transition-all flex items-center gap-2 h-[52px] w-full md:w-auto justify-center"
@@ -317,9 +307,71 @@
                   No Timetable Selected
                 </p>
                 <p class="font-label-md opacity-80 mt-2 text-center max-w-md">
-                  Choose a batch above, then click "Show Timetable" to view the
-                  generated schedule.
+                  Choose a batch above, then click "Show Timetable".
                 </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="analysisReportContainer"
+          class="hidden mt-12 space-y-8 bg-surface-container-low p-6 rounded-xl border-2 border-primary"
+        >
+          <div class="flex items-center gap-3 mb-4">
+            <span class="material-symbols-outlined text-4xl text-secondary"
+              >analytics</span
+            >
+            <h2 class="font-display-lg text-3xl text-primary">
+              Timetable Analysis Report
+            </h2>
+          </div>
+
+          <div
+            class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4"
+            id="analysisMetricsGrid"
+          ></div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="space-y-6">
+              <div
+                class="bg-white hand-drawn-border-sm p-5 shadow-sm border-error border-l-8"
+              >
+                <h3 class="font-headline-md text-xl text-primary mb-4">
+                  Missing Session Breakdown
+                </h3>
+                <div id="analysisMissingGrid" class="space-y-4"></div>
+              </div>
+              <div class="bg-white hand-drawn-border-sm p-5 shadow-sm">
+                <h3 class="font-headline-md text-xl text-primary mb-4">
+                  Constraint Satisfaction
+                </h3>
+                <div id="analysisConstraintsGrid" class="space-y-2"></div>
+              </div>
+            </div>
+
+            <div class="space-y-6">
+              <div
+                class="bg-white hand-drawn-border-sm p-5 shadow-sm border-secondary border-l-8"
+              >
+                <h3
+                  class="font-headline-md text-xl text-primary mb-4 flex items-center gap-2"
+                >
+                  <span class="material-symbols-outlined">lightbulb</span> Smart
+                  Recommendations
+                </h3>
+                <div
+                  id="analysisSmartSlots"
+                  class="space-y-3 max-h-[300px] overflow-y-auto pr-2"
+                ></div>
+              </div>
+              <div
+                class="bg-primary text-white hand-drawn-border-sm p-5 shadow-sm"
+              >
+                <h3 class="font-headline-md text-xl mb-4">
+                  Optimization Strategy
+                </h3>
+                <div id="analysisOptGrid" class="space-y-3"></div>
               </div>
             </div>
           </div>
@@ -341,7 +393,6 @@
         <p class="font-label-sm text-on-surface-variant mb-4">
           Add an optional note to track revisions or semester changes.
         </p>
-
         <div class="flex flex-col gap-2 mb-6">
           <label class="font-label-md text-primary font-bold"
             >Timetable Notes</label
@@ -349,11 +400,9 @@
           <textarea
             id="timetableNotes"
             rows="3"
-            placeholder="e.g., Final Revision for Mid-Semesters, added extra Python lab..."
             class="w-full bg-white border-2 border-primary rounded-lg p-3 text-body-md focus:ring-secondary-container focus:outline-none"
           ></textarea>
         </div>
-
         <div class="flex justify-end gap-3">
           <button
             id="closeSaveModalBtn"
@@ -372,7 +421,6 @@
       </div>
     </div>
 
-    <!-- COMMAND PALETTE OVERLAY -->
     <div
       id="commandPalette"
       class="fixed inset-0 z-[100] bg-primary/50 backdrop-blur-sm hidden flex items-start justify-center pt-[15vh] opacity-0 transition-opacity duration-200"
@@ -381,7 +429,6 @@
         class="bg-white hand-drawn-border-sm offset-shadow-sm w-[90%] max-w-2xl overflow-hidden flex flex-col transform scale-95 transition-transform duration-200"
         id="commandPaletteContent"
       >
-        <!-- Search Input -->
         <div
           class="flex items-center px-4 py-3 border-b-2 border-surface-variant"
         >
@@ -400,70 +447,44 @@
             >ESC to close</span
           >
         </div>
-
-        <!-- Command List -->
         <div class="max-h-[60vh] overflow-y-auto p-2" id="commandList">
           <div
             class="text-xs font-bold text-on-surface-variant px-4 py-2 uppercase tracking-wider"
           >
             Quick Actions
           </div>
-
           <a
             href="scheduler.html"
             class="command-item flex items-center px-4 py-3 hover:bg-secondary-container hover:text-primary rounded-lg transition-colors group cursor-pointer"
-          >
-            <span
+            ><span
               class="material-symbols-outlined mr-3 text-secondary group-hover:text-primary"
               >auto_awesome</span
-            >
-            <span class="font-label-md flex-1">Run Auto-Scheduler</span>
-          </a>
-
+            ><span class="font-label-md flex-1">Run Auto-Scheduler</span></a
+          >
           <a
             href="batch.html"
             class="command-item flex items-center px-4 py-3 hover:bg-secondary-container hover:text-primary rounded-lg transition-colors group cursor-pointer"
-          >
-            <span
+            ><span
               class="material-symbols-outlined mr-3 text-secondary group-hover:text-primary"
               >groups</span
-            >
-            <span class="font-label-md flex-1">Manage Batches & Students</span>
-          </a>
-
-          <div
-            class="command-item flex items-center px-4 py-3 hover:bg-[#FFE194] text-primary rounded-lg transition-colors group cursor-pointer"
-            onclick="alert('Searching for empty rooms...')"
+            ><span class="font-label-md flex-1"
+              >Manage Batches & Students</span
+            ></a
           >
-            <span
-              class="material-symbols-outlined mr-3 group-hover:text-primary"
-              >meeting_room</span
-            >
-            <span class="font-label-md flex-1">Find empty room today</span>
-          </div>
-
-          <a
-            href="timetable.html"
-            class="command-item flex items-center px-4 py-3 hover:bg-secondary-container hover:text-primary rounded-lg transition-colors group cursor-pointer"
-          >
-            <span
-              class="material-symbols-outlined mr-3 text-secondary group-hover:text-primary"
-              >print</span
-            >
-            <span class="font-label-md flex-1">Export PDF Timetables</span>
-          </a>
         </div>
       </div>
     </div>
+
     <script src="global.js"></script>
 
     <script>
       const API_URL = "http://127.0.0.1:8000";
       let allSchedules = [];
       let CURRENT_DEPT_ID = null;
-      let isDraftMode = false; // Track mode globally
+      let isDraftMode = false;
       let draggedItemData = null;
       let draggedHtmlElement = null;
+      let currentAnalysisData = null; // Store analysis data
 
       const dayMap = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5 };
 
@@ -477,7 +498,6 @@
 
       function togglePalette() {
         if (commandPalette.classList.contains("hidden")) {
-          // Open
           commandPalette.classList.remove("hidden");
           setTimeout(() => {
             commandPalette.classList.remove("opacity-0");
@@ -485,23 +505,19 @@
             commandInput.focus();
           }, 10);
         } else {
-          // Close
           commandPalette.classList.add("opacity-0");
           commandPaletteContent.classList.add("scale-95");
           setTimeout(() => commandPalette.classList.add("hidden"), 200);
           commandInput.value = "";
-          filterCommands(""); // Reset filter
+          filterCommands("");
         }
       }
 
-      // Global Keyboard Shortcuts
       document.addEventListener("keydown", (e) => {
-        // Check for Ctrl+K or Cmd+K
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-          e.preventDefault(); // Stop Chrome's default search bar
+          e.preventDefault();
           togglePalette();
         }
-        // Close on Escape
         if (
           e.key === "Escape" &&
           !commandPalette.classList.contains("hidden")
@@ -509,108 +525,96 @@
           togglePalette();
         }
       });
-
-      // Close when clicking outside the box
       commandPalette.addEventListener("click", (e) => {
         if (e.target === commandPalette) togglePalette();
       });
-
-      // Fuzzy Search Logic
       commandInput.addEventListener("input", (e) => {
         filterCommands(e.target.value.toLowerCase());
       });
-
       function filterCommands(query) {
         commandItems.forEach((item) => {
           const text = item.innerText.toLowerCase();
-          if (text.includes(query)) {
-            item.style.display = "flex";
-          } else {
-            item.style.display = "none";
-          }
+          item.style.display = text.includes(query) ? "flex" : "none";
         });
       }
 
-      // --- LISTEN TO GLOBAL HEADER DROPDOWN ---
       window.addEventListener("departmentReady", async (e) => {
         CURRENT_DEPT_ID = parseInt(e.detail);
-
         const urlParams = new URLSearchParams(window.location.search);
         isDraftMode = urlParams.get("draft") === "true";
-
-        if (isDraftMode) {
-          initDraftMode();
-        } else {
-          initNormalMode();
-        }
+        if (isDraftMode) initDraftMode();
+        else initNormalMode();
       });
 
       window.deleteSavedTimetable = async (batchId) => {
-        // Beautiful Confirmation Modal
         const confirmed = await SmartConfirm(
-          "Wipe Saved Timetable?",
-          "Are you sure you want to completely delete this published timetable? Students will no longer see it.",
+          "Delete Timetable?",
+          "Are you sure you want to completely delete this saved timetable?",
           "danger",
         );
         if (!confirmed) return;
-
         try {
           const response = await fetch(
             `${API_URL}/delete-timetable/${batchId}`,
             { method: "DELETE" },
           );
           const result = await response.json();
-
           if (result.success) {
-            // Show toast, wait 1.5 seconds so admin can read it, then refresh
-            SmartAlert(
-              "success",
-              "Timetable Wiped",
-              "The schedule has been successfully deleted.",
-            );
-            setTimeout(() => window.location.reload(), 1500);
+            SmartAlert("success", "Deleted", "Timetable deleted successfully.");
+            setTimeout(() => window.location.reload(), 1000);
           } else {
-            SmartAlert("error", "Deletion Failed", result.message);
+            SmartAlert("error", "Error", result.message);
           }
         } catch (e) {
-          SmartAlert(
-            "error",
-            "Connection Error",
-            "Could not connect to the server.",
-          );
+          SmartAlert("error", "Error", "Could not connect to server.");
         }
       };
 
-      // --- INIT DRAFT MODE ---
-      // --- INIT DRAFT MODE ---
       function initDraftMode() {
         document.getElementById("draftBanner").classList.remove("hidden");
-
-        // --- NEW: Hide the Title and Batch Dropdown during Draft Mode ---
-        document.getElementById("pageTitleUI").classList.add("hidden");
+        // Keep the page title visible so the View Analysis button shows up
+        document.getElementById("pageTitleUI").classList.remove("hidden");
         document.getElementById("batchSelectionUI").classList.add("hidden");
 
-        // Load the array of 3 options
         const draftOptions = JSON.parse(sessionStorage.getItem("draftOptions"));
         if (!draftOptions || draftOptions.length === 0) {
-          alert("Draft data expired or missing.");
+          SmartAlert("error", "Error", "Draft data expired or missing.");
           window.location.href = "timetable.html";
           return;
         }
 
-        // Setup the 3 UI Buttons
         const optionsContainer = document.getElementById(
           "draftOptionsContainer",
         );
         optionsContainer.innerHTML = "";
-        let currentlySelectedDraftIndex = 0; // Default to Option 1
+        let currentlySelectedDraftIndex = 0;
 
+        // =========================================================
+        // FIX: MAKE "VIEW ANALYSIS" A TOGGLE SWITCH
+        // =========================================================
+        const viewAnalysisBtn = document.getElementById("viewAnalysisBtn");
+        viewAnalysisBtn.classList.remove("hidden");
+        viewAnalysisBtn.onclick = () => {
+          const container = document.getElementById("analysisReportContainer");
+          if (container.classList.contains("hidden")) {
+            container.classList.remove("hidden");
+            renderAnalysisUI();
+            container.scrollIntoView({ behavior: "smooth", block: "start" });
+          } else {
+            container.classList.add("hidden"); // Hide it if already open
+          }
+        };
+
+        // =========================================================
+        // FIX: LIVE UPDATING TABS
+        // =========================================================
         draftOptions.forEach((opt, index) => {
           const btn = document.createElement("button");
           btn.className = `px-4 py-1.5 font-label-sm font-bold rounded-md transition-colors ${index === 0 ? "bg-primary text-on-primary" : "text-primary hover:bg-surface-container"}`;
           btn.innerText = opt.option_name;
+
           btn.onclick = () => {
-            // Update UI selection
+            // Update UI Tab Colors
             Array.from(optionsContainer.children).forEach((b) => {
               b.classList.remove("bg-primary", "text-on-primary");
               b.classList.add("text-primary", "hover:bg-surface-container");
@@ -618,19 +622,46 @@
             btn.classList.remove("text-primary", "hover:bg-surface-container");
             btn.classList.add("bg-primary", "text-on-primary");
 
-            // Render the selected grid
+            // Switch Grid Data
             currentlySelectedDraftIndex = index;
             allSchedules = draftOptions[index].records;
-            renderGrid(draftOptions[index].records[0].batch);
+            renderGrid(draftOptions[index].records[0]?.batch || "Unknown");
+
+            // Extract the Analysis Data for this new option
+            const b_id = draftOptions[index].records[0]?.batch_id;
+            if (
+              b_id &&
+              draftOptions[index].analyses &&
+              draftOptions[index].analyses[b_id]
+            ) {
+              currentAnalysisData = draftOptions[index].analyses[b_id];
+
+              // IF THE ANALYSIS PANEL IS CURRENTLY OPEN, UPDATE IT LIVE!
+              const analysisContainer = document.getElementById(
+                "analysisReportContainer",
+              );
+              if (!analysisContainer.classList.contains("hidden")) {
+                renderAnalysisUI();
+              }
+            }
           };
           optionsContainer.appendChild(btn);
         });
 
-        // Initial Render (Option 1)
+        // Initial Load (Option 1)
         allSchedules = draftOptions[0].records;
-        renderGrid(draftOptions[0].records[0].batch);
+        renderGrid(draftOptions[0].records[0]?.batch || "Unknown");
 
-        // Save Modal Logic
+        const initial_b_id = draftOptions[0].records[0]?.batch_id;
+        if (
+          initial_b_id &&
+          draftOptions[0].analyses &&
+          draftOptions[0].analyses[initial_b_id]
+        ) {
+          currentAnalysisData = draftOptions[0].analyses[initial_b_id];
+        }
+
+        // --- Save / Discard Logic ---
         const saveModal = document.getElementById("saveTimetableModal");
         const saveContent = document.getElementById(
           "saveTimetableModalContent",
@@ -638,8 +669,15 @@
 
         document
           .getElementById("discardDraftBtn")
-          .addEventListener("click", () => {
-            if (!confirm("Discard all draft options?")) return;
+          .addEventListener("click", async () => {
+            if (
+              !(await SmartConfirm(
+                "Discard Draft?",
+                "Discard all draft options?",
+                "danger",
+              ))
+            )
+              return;
             sessionStorage.removeItem("draftOptions");
             window.location.href = "timetable.html";
           });
@@ -668,12 +706,9 @@
             const notes = document.getElementById("timetableNotes").value;
             this.innerHTML = "Saving...";
             this.disabled = true;
-
             try {
-              // Send ONLY the selected option to the database!
               const selectedRecords =
                 draftOptions[currentlySelectedDraftIndex].records;
-
               const response = await fetch(`${API_URL}/save-timetable/`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -684,14 +719,21 @@
               });
               const result = await response.json();
               if (result.success) {
-                alert("Timetable Published Successfully!");
+                SmartAlert(
+                  "success",
+                  "Success",
+                  "Timetable Published Successfully!",
+                );
                 sessionStorage.removeItem("draftOptions");
-                window.location.href = "timetable.html";
+                setTimeout(
+                  () => (window.location.href = "timetable.html"),
+                  1000,
+                );
               } else {
-                alert("Error: " + result.message);
+                SmartAlert("error", "Error", result.message);
               }
             } catch (e) {
-              alert("Failed to connect to server.");
+              SmartAlert("error", "Error", "Failed to connect to server.");
             } finally {
               this.innerHTML = `<span class="material-symbols-outlined text-[18px]">save</span> Confirm & Save`;
               this.disabled = false;
@@ -699,30 +741,21 @@
           });
       }
 
-      // --- INIT NORMAL MODE ---
       async function initNormalMode() {
         if (!CURRENT_DEPT_ID) return;
-
-        if (document.getElementById("pageTitleUI")) {
-          document.getElementById("pageTitleUI").classList.remove("hidden");
-        }
+        document.getElementById("pageTitleUI").classList.remove("hidden");
         document.getElementById("batchSelectionUI").classList.remove("hidden");
-
         const batchSelect = document.getElementById("batchSelectFilter");
         batchSelect.innerHTML = `<option value="" disabled selected>Loading batches...</option>`;
-
         try {
           const batchRes = await fetch(
             `${API_URL}/get-batches/${CURRENT_DEPT_ID}`,
           );
           const batchData = await batchRes.json();
-
           batchSelect.innerHTML = `<option value="" disabled selected>Select a Batch...</option>`;
           batchData.data.forEach((b) => {
             batchSelect.innerHTML += `<option value="${b.id}" data-batchname="${b.name}">${b.name}</option>`;
           });
-
-          // Fetch timetables from DB in background
           const tableRes = await fetch(
             `${API_URL}/view-timetable/?department_id=${CURRENT_DEPT_ID}`,
           );
@@ -733,31 +766,127 @@
         }
       }
 
-      // --- SHOW BUTTON EVENT ---
       document
         .getElementById("showTimetableBtn")
-        .addEventListener("click", () => {
+        .addEventListener("click", async () => {
           const batchSelect = document.getElementById("batchSelectFilter");
           if (batchSelect.selectedIndex < 0 || !batchSelect.value) {
-            alert("Please select a batch from the dropdown first.");
+            SmartAlert(
+              "warning",
+              "Select Batch",
+              "Please select a batch first.",
+            );
             return;
           }
 
-          let batchName;
-          if (isDraftMode) {
-            // In draft mode, the value IS the batch name
-            batchName = batchSelect.value;
-          } else {
-            // In normal mode, we grab the data attribute
-            const selectedOption =
-              batchSelect.options[batchSelect.selectedIndex];
-            batchName = selectedOption.getAttribute("data-batchname");
-          }
-
+          const selectedOption = batchSelect.options[batchSelect.selectedIndex];
+          const batchName = selectedOption.getAttribute("data-batchname");
           renderGrid(batchName);
+
+          // Fetch Analysis for Normal Mode
+          try {
+            const batchId = batchSelect.value;
+            const response = await fetch(
+              `${API_URL}/analyze-timetable/${batchId}`,
+            );
+            const result = await response.json();
+            if (result.success) {
+              currentAnalysisData = result.analysis;
+              document
+                .getElementById("viewAnalysisBtn")
+                .classList.remove("hidden");
+              document.getElementById("viewAnalysisBtn").onclick = () => {
+                document
+                  .getElementById("analysisReportContainer")
+                  .classList.remove("hidden");
+                renderAnalysisUI();
+                document
+                  .getElementById("analysisReportContainer")
+                  .scrollIntoView({ behavior: "smooth" });
+              };
+            }
+          } catch (e) {
+            console.error("No analysis available.");
+          }
         });
 
-      // --- DYNAMIC GRID RENDERER ---
+      // --- RENDERING ANALYSIS REPORT ---
+      function renderAnalysisUI() {
+        if (!currentAnalysisData) return;
+        const data = currentAnalysisData;
+
+        // 1. Summary
+        const sGrid = document.getElementById("analysisMetricsGrid");
+        sGrid.innerHTML = `
+            <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Required</p><p class="text-2xl text-primary font-bold">${data.total_req}</p></div>
+            <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Scheduled</p><p class="text-2xl text-primary font-bold">${data.total_sched}</p></div>
+            <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Missing</p><p class="text-2xl ${data.total_missing > 0 ? "text-error" : "text-primary"} font-bold">${data.total_missing}</p></div>
+            <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Completion</p><p class="text-2xl ${data.comp_rate < 100 ? "text-[#b38000]" : "text-primary"} font-bold">${data.comp_rate}%</p></div>
+            <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Score</p><p class="text-2xl text-primary font-bold">${data.score}/100</p></div>
+          `;
+
+        // 2. Missing
+        const mGrid = document.getElementById("analysisMissingGrid");
+        if (data.missing_breakdown.length === 0) {
+          mGrid.innerHTML = `<p class="text-primary italic">Perfect schedule. No missing sessions.</p>`;
+        } else {
+          mGrid.innerHTML = data.missing_breakdown
+            .map(
+              (m) => `
+                  <div class="p-3 bg-error-container rounded-lg border border-error">
+                      <div class="flex justify-between items-center mb-1"><span class="font-label-md font-bold text-error">${m.subject}</span> <span class="text-xs bg-error text-white px-2 py-0.5 rounded-md">${m.missing} Missing</span></div>
+                      <p class="text-sm text-error opacity-80 italic">Root Cause: ${m.cause}</p>
+                  </div>
+              `,
+            )
+            .join("");
+        }
+
+        // 3. Constraints
+        const cGrid = document.getElementById("analysisConstraintsGrid");
+        cGrid.innerHTML = data.constraints
+          .map(
+            (c) => `
+              <div class="flex justify-between items-center border-b border-surface-variant py-2">
+                  <span class="text-sm font-label-md text-primary">${c.name}</span>
+                  <span class="text-xs px-2 py-1 rounded border ${c.status === "Passed" ? "bg-tertiary-fixed border-primary text-primary" : "bg-error-container border-error text-error font-bold"}">${c.status}</span>
+              </div>
+          `,
+          )
+          .join("");
+
+        // 4. Smart Slots
+        const ssGrid = document.getElementById("analysisSmartSlots");
+        if (data.smart_recommendations.length === 0) {
+          ssGrid.innerHTML = `<p class="text-primary italic text-sm">No alternative slots available based on current workload.</p>`;
+        } else {
+          ssGrid.innerHTML = data.smart_recommendations
+            .map(
+              (s) => `
+                  <div class="p-3 border border-outline-variant rounded-lg bg-surface flex flex-col">
+                      <div class="flex justify-between font-bold text-sm text-primary mb-1"><span>${s.subject}</span><span>${s.day} @ ${s.time.split(" - ")[0]}</span></div>
+                      <div class="flex justify-between text-xs text-on-surface-variant mb-2"><span>${s.faculty}</span><span>${s.room}</span></div>
+                      <span class="text-[10px] bg-secondary-container text-secondary px-2 py-1 rounded self-start">${s.reason}</span>
+                  </div>
+              `,
+            )
+            .join("");
+        }
+
+        // 5. Opt Suggestions
+        const optGrid = document.getElementById("analysisOptGrid");
+        optGrid.innerHTML = data.optimization_suggestions
+          .map(
+            (o) => `
+              <div class="p-3 bg-surface text-primary rounded-lg border border-outline-variant flex items-center justify-between">
+                  <span class="text-sm font-label-md">${o.text}</span>
+                  <span class="text-xs font-bold text-tertiary-container bg-tertiary-fixed px-2 py-1 rounded-md border border-tertiary-container">${o.impact}</span>
+              </div>
+          `,
+          )
+          .join("");
+      }
+
       function renderGrid(batchName) {
         const gridContainer = document.getElementById("gridContainer");
         const batchSchedules = allSchedules.filter(
@@ -765,52 +894,34 @@
         );
 
         if (batchSchedules.length === 0) {
-          gridContainer.innerHTML = `
-               <div class="flex flex-col items-center justify-center p-16 text-error w-full h-full mt-10">
-                  <span class="material-symbols-outlined text-[64px] mb-4 opacity-50">warning</span>
-                  <p class="font-headline-md text-xl">No Timetable Found</p>
-                  <p class="font-label-md mt-2 text-on-surface-variant">There are no classes scheduled for <strong>${batchName}</strong>.</p>
-               </div>
-            `;
-          // Hide action bar if no timetable is found
+          gridContainer.innerHTML = `<div class="flex flex-col items-center justify-center p-16 text-error w-full h-full mt-10"><span class="material-symbols-outlined text-[64px] mb-4 opacity-50">warning</span><p class="font-headline-md text-xl">No Timetable Found</p><p class="font-label-md mt-2 text-on-surface-variant">There are no classes scheduled for <strong>${batchName}</strong>.</p></div>`;
           document
             .getElementById("savedTimetableActionBar")
             .classList.add("hidden");
           return;
         }
 
-        // --- NEW LOGIC: DISPLAY NOTES & BIND DELETE BUTTON ---
         const actionBar = document.getElementById("savedTimetableActionBar");
         const noteDisplay = document.getElementById("displayTimetableNote");
         const deleteBtn = document.getElementById("deleteTimetableBtn");
 
         if (isDraftMode) {
-          actionBar.classList.add("hidden"); // Handled by top banner in draft mode
+          actionBar.classList.add("hidden");
         } else {
-          actionBar.classList.remove("hidden"); // Show in normal mode
-
-          // Extract note and attach it to UI
-          const noteText = batchSchedules[0].notes;
-          noteDisplay.innerText = noteText
-            ? noteText
-            : "No notes provided for this timetable.";
-
-          // Bind the delete button safely by grabbing the ID straight from the dropdown
+          actionBar.classList.remove("hidden");
+          noteDisplay.innerText =
+            batchSchedules[0].notes || "No notes provided for this timetable.";
           deleteBtn.onclick = function () {
             const batchSelect = document.getElementById("batchSelectFilter");
-            const actualBatchId = parseInt(batchSelect.value); // Pulls directly from the UI
-
+            const actualBatchId = parseInt(batchSelect.value);
             if (!actualBatchId) {
-              alert("Could not detect Batch ID. Please refresh the page.");
+              SmartAlert("error", "Error", "Could not detect Batch ID.");
               return;
             }
-
             window.deleteSavedTimetable(actualBatchId);
           };
         }
-        // --- END NEW LOGIC ---
 
-        // Determine unique slots and sort them by time
         const SHIFT_SLOTS = [
           ...new Set(batchSchedules.map((s) => s.timeslot)),
         ].sort((a, b) => {
@@ -821,54 +932,29 @@
           );
         });
 
-        // Check for exactly 1 hour gap to render "Break" row
         let gapFound = null;
         const ONE_HOUR_MS = 3600000;
-
         for (let i = 0; i < SHIFT_SLOTS.length - 1; i++) {
           const currentEnd = SHIFT_SLOTS[i].split(" - ")[1].trim();
           const nextStart = SHIFT_SLOTS[i + 1].split(" - ")[0].trim();
           const diff =
             new Date(`1970/01/01 ${nextStart}`) -
             new Date(`1970/01/01 ${currentEnd}`);
-
           if (diff === ONE_HOUR_MS) {
             gapFound = { start: SHIFT_SLOTS[i], end: SHIFT_SLOTS[i + 1] };
             break;
           }
         }
 
-        let html = `
-          <div class="timetable-grid bg-surface-container-low border-b-2 border-primary sticky top-0 z-10">
-            <div class="p-4 border-r-2 border-primary bg-surface-container-low"></div>
-            <div class="p-4 text-center font-label-md text-primary border-r-2 border-surface-variant">Monday</div>
-            <div class="p-4 text-center font-label-md text-primary border-r-2 border-surface-variant">Tuesday</div>
-            <div class="p-4 text-center font-label-md text-primary border-r-2 border-surface-variant">Wednesday</div>
-            <div class="p-4 text-center font-label-md text-primary border-r-2 border-surface-variant">Thursday</div>
-            <div class="p-4 text-center font-label-md text-primary">Friday</div>
-          </div>
-        `;
+        let html = `<div class="timetable-grid bg-surface-container-low border-b-2 border-primary sticky top-0 z-10"><div class="p-4 border-r-2 border-primary bg-surface-container-low"></div><div class="p-4 text-center font-label-md text-primary border-r-2 border-surface-variant">Monday</div><div class="p-4 text-center font-label-md text-primary border-r-2 border-surface-variant">Tuesday</div><div class="p-4 text-center font-label-md text-primary border-r-2 border-surface-variant">Wednesday</div><div class="p-4 text-center font-label-md text-primary border-r-2 border-surface-variant">Thursday</div><div class="p-4 text-center font-label-md text-primary">Friday</div></div>`;
 
         SHIFT_SLOTS.forEach((slot) => {
-          // Render Break Row if applicable
           if (slot === gapFound?.end) {
-            html += `
-                <div class="timetable-grid time-row" style="min-height: 80px">
-                  <div class="text-right pr-4 py-4 font-label-sm text-on-surface-variant border-r-2 border-primary bg-surface-bright flex items-center justify-end">--:--</div>
-                  <div class="border-r-2 border-surface-variant border-dashed bg-surface-container-lowest flex items-center justify-center col-span-5 border-y-2 border-surface-variant">
-                    <span class="font-label-sm text-on-surface-variant tracking-widest uppercase">Break Period</span>
-                  </div>
-                </div>`;
-            return;
+            html += `<div class="timetable-grid time-row" style="min-height: 80px"><div class="text-right pr-4 py-4 font-label-sm text-on-surface-variant border-r-2 border-primary bg-surface-bright flex items-center justify-end">--:--</div><div class="border-r-2 border-surface-variant border-dashed bg-surface-container-lowest flex items-center justify-center col-span-5 border-y-2 border-surface-variant"><span class="font-label-sm text-on-surface-variant tracking-widest uppercase">Break Period</span></div></div>`;
           }
 
           const displaySlot = slot.replace(/AM|PM/g, "");
-          let rowHtml = `
-            <div class="timetable-grid time-row">
-              <div class="text-right pr-4 py-4 font-label-sm text-on-surface-variant border-r-2 border-primary bg-surface-bright flex flex-col justify-center">
-                <span class="font-bold text-primary">${displaySlot.split("-")[0].trim()}</span>
-                <span class="text-[10px] opacity-70">${displaySlot.split("-")[1].trim()}</span>
-              </div>`;
+          let rowHtml = `<div class="timetable-grid time-row"><div class="text-right pr-4 py-4 font-label-sm text-on-surface-variant border-r-2 border-primary bg-surface-bright flex flex-col justify-center"><span class="font-bold text-primary">${displaySlot.split("-")[0].trim()}</span><span class="text-[10px] opacity-70">${displaySlot.split("-")[1].trim()}</span></div>`;
 
           for (let i = 1; i <= 5; i++) {
             const dayStr = Object.keys(dayMap).find((key) => dayMap[key] === i);
@@ -877,37 +963,12 @@
             );
 
             if (classData) {
-              const bgColor = classData.room.includes("Lab")
+              const bgColor = classData.room.includes("ROOM")
                 ? "bg-tertiary-fixed"
                 : "bg-[#FFE194]";
-
-              rowHtml += `
-                    <div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200"
-                         data-day="${dayStr}" 
-                         data-time="${slot}"
-                         ondragover="handleDragOver(event)"
-                         ondrop="handleDrop(event, '${dayStr}', '${slot}')">
-                         
-                      <div class="schedule-card ${bgColor} flex flex-col justify-between cursor-move" 
-                           draggable="true" 
-                           ondragstart="handleDragStart(event, ${classData.batch_id}, ${classData.faculty_id}, ${classData.room_id}, '${dayStr}', '${slot}')"
-                           id="card_${classData.id}">
-                           
-                        <p class="font-label-md text-primary mb-1 leading-tight">${classData.subject}</p>
-                        <div class="flex justify-between items-end mt-auto pt-2">
-                          <p class="text-label-sm text-on-surface-variant bg-white/50 px-1.5 rounded-md border border-primary/20"><span class="material-symbols-outlined text-[12px] align-middle">meeting_room</span> ${classData.room.replace("Room_", "")}</p>
-                          <p class="text-label-sm text-primary font-bold">${classData.faculty.replace("Prof_", "")}</p>
-                        </div>
-                      </div>
-                    </div>`;
+              rowHtml += `<div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200" data-day="${dayStr}" data-time="${slot}" ondragover="handleDragOver(event)" ondrop="handleDrop(event, '${dayStr}', '${slot}')"><div class="schedule-card ${bgColor} flex flex-col justify-between cursor-move" draggable="true" ondragstart="handleDragStart(event, ${classData.batch_id}, ${classData.faculty_id}, ${classData.room_id}, '${dayStr}', '${slot}')" id="card_${classData.id}"><p class="font-label-md text-primary mb-1 leading-tight">${classData.subject}</p><div class="flex justify-between items-end mt-auto pt-2"><p class="text-label-sm text-on-surface-variant bg-white/50 px-1.5 rounded-md border border-primary/20"><span class="material-symbols-outlined text-[12px] align-middle">meeting_room</span> ${classData.room.replace("Room_", "")}</p><p class="text-label-sm text-primary font-bold">${classData.faculty.replace("Prof_", "")}</p></div></div></div>`;
             } else {
-              rowHtml += `
-                    <div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200"
-                         data-day="${dayStr}" 
-                         data-time="${slot}"
-                         ondragover="handleDragOver(event)"
-                         ondrop="handleDrop(event, '${dayStr}', '${slot}')">
-                    </div>`;
+              rowHtml += `<div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200" data-day="${dayStr}" data-time="${slot}" ondragover="handleDragOver(event)" ondrop="handleDrop(event, '${dayStr}', '${slot}')"></div>`;
             }
           }
           rowHtml += `</div>`;
@@ -916,12 +977,9 @@
 
         gridContainer.innerHTML = html;
       }
-      // =========================================================
-      // NEW: DRAG AND DROP TIMETABLE LOGIC
-      // =========================================================
 
       function handleDragOver(event) {
-        event.preventDefault(); // Necessary to allow dropping
+        event.preventDefault();
       }
 
       function handleDragStart(
@@ -940,30 +998,20 @@
           currentTime,
         };
         draggedHtmlElement = event.target;
-
-        // Add a cool dragging effect
         event.target.classList.add("opacity-50", "scale-95", "shadow-xl");
 
-        // THE MAGIC: Instantly scan the grid and highlight valid/invalid slots
-        const allDropZones = document.querySelectorAll(".drop-zone");
-
-        allDropZones.forEach((zone) => {
+        document.querySelectorAll(".drop-zone").forEach((zone) => {
           const zoneDay = zone.getAttribute("data-day");
           const zoneTime = zone.getAttribute("data-time");
-
-          // Skip the slot the card is currently in
           if (zoneDay === currentDay && zoneTime === currentTime) return;
 
-          // Check if there is a conflict in the loaded schedule data
           const isConflict = allSchedules.some(
             (s) =>
               s.day_of_week === zoneDay &&
               s.timeslot === zoneTime &&
               (s.faculty_id === faculty_id || s.room_id === room_id),
           );
-
           if (isConflict) {
-            // RED: Slot is blocked!
             zone.classList.add(
               "bg-red-50",
               "border-error",
@@ -972,7 +1020,6 @@
             );
             zone.setAttribute("data-conflict", "true");
           } else {
-            // GREEN: Slot is free!
             zone.classList.add(
               "bg-tertiary-fixed",
               "border-green-600",
@@ -984,7 +1031,6 @@
         });
       }
 
-      // 2. CLEAN UP ON DRAG END
       document.addEventListener("dragend", () => {
         if (draggedHtmlElement) {
           draggedHtmlElement.classList.remove(
@@ -993,8 +1039,6 @@
             "shadow-xl",
           );
         }
-
-        // Remove all red/green highlighting
         document.querySelectorAll(".drop-zone").forEach((zone) => {
           zone.classList.remove(
             "bg-red-50",
@@ -1011,78 +1055,59 @@
       async function handleDrop(event, newDay, newTimeSlot) {
         event.preventDefault();
         if (!draggedHtmlElement) return;
-
-        // 1. Find the actual drop zone container (the dashed border div)
         let dropZone = event.target.closest(".drop-zone");
         if (!dropZone) return;
 
-        // 2. Check if the user dropped it on a RED conflict zone
         const isConflict = dropZone.getAttribute("data-conflict") === "true";
-
         if (isConflict) {
           SmartAlert(
-            "warning",
-            "Conflict Prevented",
-            "That slot is unavailable! The Professor or Room is already occupied at this time.",
+            "error",
+            "Conflict!",
+            "Professor or Room is busy at this time.",
           );
-          draggedHtmlElement.style.opacity = "1";
           return;
         }
 
-        // 3. Get the Database ID of the card being dragged
-        const recordId = draggedHtmlElement.id.split("_")[1]; // Gets the ID from "card_45"
-
-        // 4. THE FIX: SEND THE UPDATE TO THE DATABASE INSTANTLY
-        try {
-          // Show a quick loading state
-          draggedHtmlElement.style.opacity = "0.5";
-
-          const response = await fetch(`${API_URL}/update-timetable-slot/`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              record_id: parseInt(recordId),
-              new_day: newDay,
-              new_timeslot: newTimeSlot,
-            }),
-          });
-
-          const result = await response.json();
-
-          // Catch 422 Validation Errors
-          if (!response.ok) {
-            const errorMsg = result.detail
-              ? "System Data Error: Missing Record ID. Please refresh."
-              : result.message;
-            SmartAlert("error", "Move Failed", errorMsg);
+        const recordId = draggedHtmlElement.id.split("_")[1];
+        if (!isDraftMode) {
+          try {
+            draggedHtmlElement.style.opacity = "0.5";
+            const response = await fetch(`${API_URL}/update-timetable-slot/`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                record_id: parseInt(recordId),
+                new_day: newDay,
+                new_timeslot: newTimeSlot,
+              }),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+              SmartAlert("error", "Error", result.detail || result.message);
+              draggedHtmlElement.style.opacity = "1";
+              return;
+            }
+            if (result.success === false) {
+              SmartAlert("error", "Error", result.message);
+              draggedHtmlElement.style.opacity = "1";
+              return;
+            }
+          } catch (e) {
+            SmartAlert("error", "Error", "Network error.");
             draggedHtmlElement.style.opacity = "1";
             return;
           }
-
-          // Catch Custom Backend Rejections (like Room Conflicts)
-          if (result.success === false) {
-            SmartAlert("error", "Move Prevented", result.message);
-            draggedHtmlElement.style.opacity = "1";
-            return;
-          }
-        } catch (e) {
-          alert("Network error. Could not reach the server to save.");
-          draggedHtmlElement.style.opacity = "1";
-          return;
         }
 
-        // 5. SUCCESS! DB is updated. Move the HTML card visually
         dropZone.appendChild(draggedHtmlElement);
         draggedHtmlElement.style.opacity = "1";
 
-        // 6. Update the local memory array so the scanner knows it moved for the next drag
         const recordToUpdate = allSchedules.find((s) => s.id == recordId);
         if (recordToUpdate) {
           recordToUpdate.day_of_week = newDay;
           recordToUpdate.timeslot = newTimeSlot;
         }
 
-        // 7. Flash Green to show the Admin it saved successfully
         draggedHtmlElement.classList.add("ring-4", "ring-green-500");
         setTimeout(
           () => draggedHtmlElement.classList.remove("ring-4", "ring-green-500"),
