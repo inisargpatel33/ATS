@@ -488,35 +488,6 @@
 
       const dayMap = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5 };
 
-      // --- UNIVERSAL ANALYSIS BUTTON LISTENER ---
-      document.addEventListener("DOMContentLoaded", () => {
-        const viewAnalysisBtn = document.getElementById("viewAnalysisBtn");
-        if (viewAnalysisBtn) {
-          viewAnalysisBtn.addEventListener("click", () => {
-            const container = document.getElementById(
-              "analysisReportContainer",
-            );
-            if (container.classList.contains("hidden")) {
-              container.classList.remove("hidden");
-              if (!currentAnalysisData) {
-                document.getElementById("analysisMetricsGrid").innerHTML =
-                  `<div class="col-span-full p-4 text-center text-error font-bold">Analysis data not generated for this batch.</div>`;
-                document.getElementById("analysisMissingGrid").innerHTML = "";
-                document.getElementById("analysisConstraintsGrid").innerHTML =
-                  "";
-                document.getElementById("analysisSmartSlots").innerHTML = "";
-                document.getElementById("analysisOptGrid").innerHTML = "";
-              } else {
-                renderAnalysisUI();
-              }
-              container.scrollIntoView({ behavior: "smooth", block: "start" });
-            } else {
-              container.classList.add("hidden");
-            }
-          });
-        }
-      });
-
       // --- CMD+K ---
       const commandPalette = document.getElementById("commandPalette");
       const commandPaletteContent = document.getElementById(
@@ -564,6 +535,35 @@
         });
       }
 
+      // --- UNIVERSAL ANALYSIS BUTTON LISTENER ---
+      document.addEventListener("DOMContentLoaded", () => {
+        const viewAnalysisBtn = document.getElementById("viewAnalysisBtn");
+        if (viewAnalysisBtn) {
+          viewAnalysisBtn.addEventListener("click", () => {
+            const container = document.getElementById(
+              "analysisReportContainer",
+            );
+            if (container.classList.contains("hidden")) {
+              container.classList.remove("hidden");
+              if (!currentAnalysisData) {
+                document.getElementById("analysisMetricsGrid").innerHTML =
+                  `<div class="col-span-full p-4 text-center text-error font-bold">Analysis data not generated for this batch.</div>`;
+                document.getElementById("analysisMissingGrid").innerHTML = "";
+                document.getElementById("analysisConstraintsGrid").innerHTML =
+                  "";
+                document.getElementById("analysisSmartSlots").innerHTML = "";
+                document.getElementById("analysisOptGrid").innerHTML = "";
+              } else {
+                renderAnalysisUI();
+              }
+              container.scrollIntoView({ behavior: "smooth", block: "start" });
+            } else {
+              container.classList.add("hidden");
+            }
+          });
+        }
+      });
+
       // --- INITIALIZATION ---
       window.addEventListener("departmentReady", async (e) => {
         CURRENT_DEPT_ID = parseInt(e.detail);
@@ -571,6 +571,14 @@
         isDraftMode = urlParams.get("draft") === "true";
         if (isDraftMode) initDraftMode();
         else initNormalMode();
+      });
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("draft") === "true" && !isDraftMode) {
+          isDraftMode = true;
+          initDraftMode();
+        }
       });
 
       window.deleteSavedTimetable = async (batchId) => {
@@ -613,7 +621,6 @@
         const targetBatchId = sessionStorage.getItem("draftBatchId");
         const batchSelect = document.getElementById("batchSelectFilter");
         if (!batchSelect) return;
-
         batchSelect.innerHTML = `<option value="" disabled>Select a Batch...</option>`;
 
         try {
@@ -708,6 +715,7 @@
           optionsContainer.appendChild(btn);
         });
 
+        // Save Logic
         document
           .getElementById("discardDraftBtn")
           .addEventListener("click", () => {
@@ -765,7 +773,6 @@
         };
       }
 
-      // --- NORMAL MODE ---
       async function initNormalMode() {
         if (!CURRENT_DEPT_ID) return;
         document.getElementById("pageTitleUI").classList.remove("hidden");
@@ -805,14 +812,6 @@
           const selectedOption = batchSelect.options[batchSelect.selectedIndex];
           const batchName = selectedOption.getAttribute("data-batchname");
           const batchId = parseInt(batchSelect.value);
-
-          // THE FIX: Always fetch the most recent data from the DB so Recommendations are never stale!
-          if (!isDraftMode) {
-            const tableRes = await fetch(
-              `${API_URL}/view-timetable/?department_id=${CURRENT_DEPT_ID}`,
-            );
-            allSchedules = (await tableRes.json()).data;
-          }
 
           renderGrid(batchName);
 
@@ -861,7 +860,6 @@
         });
       }
 
-      // --- RENDERING ---
       function renderAnalysisUI() {
         if (!currentAnalysisData) return;
         const data = currentAnalysisData;
@@ -1099,6 +1097,36 @@
           recordToUpdate.day_of_week = newDay;
           recordToUpdate.timeslot = newTimeSlot;
         }
+
+        // =========================================================
+        // REAL-TIME CLEANUP (DRAG AND DROP)
+        // =========================================================
+        // If a user drags a class into a slot, instantly remove any stale recommendations that wanted that exact slot or room!
+        if (currentAnalysisData && currentAnalysisData.smart_recommendations) {
+          currentAnalysisData.smart_recommendations =
+            currentAnalysisData.smart_recommendations.filter((rec) => {
+              // If recommendation is for the exact day/time we just filled, the Batch is busy! Remove it.
+              if (rec.day === newDay && rec.time === newTimeSlot) return false;
+              // If recommendation needs the room or faculty we just assigned here, it's invalid!
+              if (recordToUpdate) {
+                if (
+                  rec.faculty_id === recordToUpdate.faculty_id &&
+                  rec.day === newDay &&
+                  rec.time === newTimeSlot
+                )
+                  return false;
+                if (
+                  rec.room_id === recordToUpdate.room_id &&
+                  rec.day === newDay &&
+                  rec.time === newTimeSlot
+                )
+                  return false;
+              }
+              return true;
+            });
+          renderAnalysisUI();
+        }
+
         draggedHtmlElement.classList.add("ring-4", "ring-green-500");
         setTimeout(
           () => draggedHtmlElement.classList.remove("ring-4", "ring-green-500"),
@@ -1107,69 +1135,80 @@
       }
 
       // =========================================================
-      // THE FIX: SYNCHRONIZED RECOMMENDATION ENGINE
+      // REAL-TIME CLEANUP (CLICK TO APPLY)
       // =========================================================
       window.applySmartRecommendation = async function (index) {
         if (!currentAnalysisData) return;
         const rec = currentAnalysisData.smart_recommendations[index];
-        const card = document.getElementById(`rec-card-${index}`);
         const select = document.getElementById("batchSelectFilter");
         const batchId = parseInt(select.value);
         const batchName =
           select.options[select.selectedIndex].getAttribute("data-batchname");
 
-        // SAFETY CHECK 1: Is this Batch already taking a class right now?
-        const batchConflict = allSchedules.some(
-          (s) =>
-            s.batch_id === batchId &&
-            s.day_of_week === rec.day &&
-            s.timeslot === rec.time,
+        const newRecord = {
+          id: "temp_" + Date.now(),
+          batch_id: batchId,
+          department_id: CURRENT_DEPT_ID,
+          faculty_id: rec.faculty_id,
+          room_id: rec.room_id,
+          subject_id: rec.subject_id,
+          day_of_week: rec.day,
+          timeslot: rec.time,
+          faculty: rec.faculty,
+          subject: rec.subject,
+          room: rec.room,
+          batch: batchName,
+        };
+
+        allSchedules.push(newRecord);
+
+        // Instantly clean up overlapping recommendations so they disappear from the screen
+        currentAnalysisData.smart_recommendations =
+          currentAnalysisData.smart_recommendations.filter((r, i) => {
+            if (i === index) return false;
+            if (r.day === rec.day && r.time === rec.time) return false;
+            if (
+              r.faculty_id === rec.faculty_id &&
+              r.day === rec.day &&
+              r.time === rec.time
+            )
+              return false;
+            if (
+              r.room_id === rec.room_id &&
+              r.day === rec.day &&
+              r.time === rec.time
+            )
+              return false;
+            return true;
+          });
+
+        // Update Stats Locally
+        currentAnalysisData.total_sched += 1;
+        currentAnalysisData.total_missing = Math.max(
+          0,
+          currentAnalysisData.total_missing - 1,
         );
-        if (batchConflict) {
-          alert(
-            "This Batch already has a class scheduled at this time. Please refresh to get new recommendations.",
-          );
-          if (!isDraftMode) document.getElementById("showTimetableBtn").click();
-          return;
+        currentAnalysisData.comp_rate = Math.round(
+          (currentAnalysisData.total_sched / currentAnalysisData.total_req) *
+            100,
+        );
+        currentAnalysisData.score = currentAnalysisData.comp_rate;
+        const missingItem = currentAnalysisData.missing_breakdown.find(
+          (m) => m.subject === rec.subject,
+        );
+        if (missingItem) {
+          missingItem.missing -= 1;
+          if (missingItem.missing <= 0)
+            currentAnalysisData.missing_breakdown =
+              currentAnalysisData.missing_breakdown.filter(
+                (m) => m.subject !== rec.subject,
+              );
         }
 
-        // SAFETY CHECK 2: Is the Room or Faculty taken?
-        const resourceConflict = allSchedules.some(
-          (s) =>
-            s.day_of_week === rec.day &&
-            s.timeslot === rec.time &&
-            (s.room_id === rec.room_id || s.faculty_id === rec.faculty_id),
-        );
-        if (resourceConflict) {
-          alert(
-            "The Room or Faculty is no longer available. Please refresh to get new recommendations.",
-          );
-          if (!isDraftMode) document.getElementById("showTimetableBtn").click();
-          return;
-        }
-
-        // Dim the clicked card immediately for UI feedback
-        card.style.opacity = "0.5";
-        card.style.pointerEvents = "none";
+        renderAnalysisUI();
+        renderGrid(batchName);
 
         if (isDraftMode) {
-          // --- DRAFT MODE (Memory Only) ---
-          const newRecord = {
-            id: "temp_" + Date.now(),
-            batch_id: batchId,
-            department_id: CURRENT_DEPT_ID,
-            faculty_id: rec.faculty_id,
-            room_id: rec.room_id,
-            subject_id: rec.subject_id,
-            day_of_week: rec.day,
-            timeslot: rec.time,
-            faculty: rec.faculty,
-            subject: rec.subject,
-            room: rec.room,
-            batch: batchName,
-          };
-          allSchedules.push(newRecord);
-
           const draftOptions = JSON.parse(
             sessionStorage.getItem("draftOptions"),
           );
@@ -1178,42 +1217,47 @@
           );
           sessionStorage.setItem("draftOptions", JSON.stringify(draftOptions));
 
-          // Manually remove it from the UI list and recalculate
-          currentAnalysisData.smart_recommendations.splice(index, 1);
-          currentAnalysisData.total_sched += 1;
-          currentAnalysisData.total_missing = Math.max(
-            0,
-            currentAnalysisData.total_missing - 1,
-          );
-          currentAnalysisData.comp_rate = Math.round(
-            (currentAnalysisData.total_sched / currentAnalysisData.total_req) *
-              100,
-          );
-          currentAnalysisData.score = currentAnalysisData.comp_rate;
-
-          const missingItem = currentAnalysisData.missing_breakdown.find(
-            (m) => m.subject === rec.subject,
-          );
-          if (missingItem) {
-            missingItem.missing -= 1;
-            if (missingItem.missing <= 0) {
-              currentAnalysisData.missing_breakdown =
-                currentAnalysisData.missing_breakdown.filter(
-                  (m) => m.subject !== rec.subject,
-                );
-            }
-          }
-
-          renderAnalysisUI();
-          renderGrid(batchName);
-
-          // Apply the Green Highlight after rendering
           setTimeout(() => {
-            const dropZone = document.querySelector(
-              `.drop-zone[data-day="${rec.day}"][data-time="${rec.time}"]`,
-            );
-            if (dropZone) {
-              const newCardEl = dropZone.querySelector(".schedule-card");
+            const newCardEl = document.getElementById(`card_${newRecord.id}`);
+            if (newCardEl) {
+              newCardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+              newCardEl.classList.add(
+                "ring-4",
+                "ring-green-500",
+                "scale-105",
+                "transition-all",
+                "duration-300",
+              );
+              setTimeout(
+                () =>
+                  newCardEl.classList.remove(
+                    "ring-4",
+                    "ring-green-500",
+                    "scale-105",
+                  ),
+                1500,
+              );
+            }
+          }, 100);
+        } else {
+          try {
+            const response = await fetch(`${API_URL}/save-timetable/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                records: allSchedules,
+                notes: allSchedules[0]?.notes || "",
+              }),
+            });
+            const result = await response.json();
+            if (!result.success) {
+              alert("Database Save Error: " + result.message);
+              allSchedules.pop();
+              return;
+            }
+
+            setTimeout(() => {
+              const newCardEl = document.getElementById(`card_${newRecord.id}`);
               if (newCardEl) {
                 newCardEl.scrollIntoView({
                   behavior: "smooth",
@@ -1236,95 +1280,10 @@
                   1500,
                 );
               }
-            }
-          }, 100);
-        } else {
-          // --- LIVE MODE (Database Sync) ---
-          const newRecord = {
-            id: "temp_" + Date.now(),
-            batch_id: batchId,
-            department_id: CURRENT_DEPT_ID,
-            faculty_id: rec.faculty_id,
-            room_id: rec.room_id,
-            subject_id: rec.subject_id,
-            day_of_week: rec.day,
-            timeslot: rec.time,
-            faculty: rec.faculty,
-            subject: rec.subject,
-            room: rec.room,
-            batch: batchName,
-          };
-          const tempSchedules = [...allSchedules, newRecord];
-
-          try {
-            // 1. Save it to Python
-            const response = await fetch(`${API_URL}/save-timetable/`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                records: tempSchedules,
-                notes: tempSchedules[0]?.notes || "",
-              }),
-            });
-            const result = await response.json();
-
-            if (!result.success) {
-              alert("Database Save Error: " + result.message);
-              card.style.opacity = "1";
-              card.style.pointerEvents = "auto";
-              return;
-            }
-
-            // 2. FETCH FRESH DATA (This guarantees the recommendation vanishes!)
-            const tableRes = await fetch(
-              `${API_URL}/view-timetable/?department_id=${CURRENT_DEPT_ID}`,
-            );
-            allSchedules = (await tableRes.json()).data;
-
-            const analysisRes = await fetch(
-              `${API_URL}/analyze-timetable/${batchId}`,
-            );
-            currentAnalysisData = (await analysisRes.json()).analysis;
-
-            // 3. Render the fresh, updated UI
-            renderAnalysisUI();
-            renderGrid(batchName);
-
-            // 4. Locate the newly rendered box using Day/Time coordinates and HIGHLIGHT IT!
-            setTimeout(() => {
-              const dropZone = document.querySelector(
-                `.drop-zone[data-day="${rec.day}"][data-time="${rec.time}"]`,
-              );
-              if (dropZone) {
-                const newCardEl = dropZone.querySelector(".schedule-card");
-                if (newCardEl) {
-                  newCardEl.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                  });
-                  newCardEl.classList.add(
-                    "ring-4",
-                    "ring-green-500",
-                    "scale-105",
-                    "transition-all",
-                    "duration-300",
-                  );
-                  setTimeout(
-                    () =>
-                      newCardEl.classList.remove(
-                        "ring-4",
-                        "ring-green-500",
-                        "scale-105",
-                      ),
-                    1500,
-                  );
-                }
-              }
             }, 100);
           } catch (e) {
             alert("Network Error.");
-            card.style.opacity = "1";
-            card.style.pointerEvents = "auto";
+            allSchedules.pop();
             return;
           }
         }
