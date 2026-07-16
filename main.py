@@ -4,12 +4,27 @@ from pydantic import BaseModel, field_validator
 from typing import List, Optional
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from psycopg2 import errors
+from psycopg2 import errors, pool
 from ortools.sat.python import cp_model
 from collections import defaultdict
+from auth import require_admin
+from fastapi import Depends
 import math
 import random
-from psycopg2 import pool 
+from auth import create_access_token
+import bcrypt
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+
+# ⚠️ FAKE DATABASE FOR ADMIN PASSWORD 
+# Generate the bcrypt hash directly using the modern bcrypt library
+HASHED_ADMIN_PASSWORD = bcrypt.hashpw(b"supersecret", bcrypt.gensalt())
+
+
+# IMPORT YOUR NEW CONFIG
+from settings import DATABASE_URL, SECRET_KEY, ALLOWED_ORIGINS
+
+
 
 # =========================================================
 # FASTAPI APP
@@ -19,16 +34,41 @@ app = FastAPI(title="Timetable SaaS API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+    allow_headers=[
+        "Authorization",
+        "authorization",
+        "Content-Type",
+        "content-type",
+        "Accept",
+        "accept",
+        "Origin",
+        "origin",
+        "X-Requested-With",
+        "x-requested-with",
+        "Access-Control-Request-Headers",
+        "Access-Control-Request-Method",
+    ],
 )
 
-#  =========================================================
+
+# =========================================================
+# THE ULTIMATE CORS BYPASS (Serve HTML directly from Python)
+# =========================================================
+# This tells Python to serve your HTML files directly
+app.mount("/ui", StaticFiles(directory=".", html=True), name="ui")
+
+@app.get("/")
+def root():
+    # Automatically redirect you to the login page
+    return RedirectResponse(url="/ui/login.html")
+
+# =========================================================
 # DATABASE CONNECTION POOL
 # =========================================================
-DATABASE_URL = "postgresql://postgres:Nsrg%4033patel@db.rxseblfkhgyzuimejnmu.supabase.co:5432/postgres"
+
 try:
     db_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1, maxconn=20, dsn=DATABASE_URL, cursor_factory=RealDictCursor
@@ -37,6 +77,7 @@ try:
 except Exception as e:
     print("❌ Failed to initialize connection pool:", e)
     db_pool = None
+
     
 
 def get_db_connection():
@@ -80,12 +121,59 @@ class GenerateRequest(BaseModel): constraints: List[str] = []; batch_id: str = "
 class UpdateSlotRequest(BaseModel): record_id: int; new_day: str; new_timeslot: str
 class TimetableRecord(BaseModel): department_id: int; day_of_week: str; timeslot: str; room_id: int; batch_id: int; subject_id: int; faculty_id: int
 class SaveTimetableRequest(BaseModel): records: List[TimetableRecord]; notes: str = ""
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 # =========================================================
 # CRUD ENDPOINTS (Departments, Faculties, Rooms, Batches, Subjects, Expertise)
 # =========================================================
+
+
+@app.post("/login")
+def login(credentials: LoginRequest):
+    print(f"\n--- LOGIN ATTEMPT ---")
+    print(f"User tried to log in as: {credentials.username}")
+    
+    try:
+        # 1. Convert typed password to bytes safely
+        typed_password_bytes = credentials.password.encode('utf-8')
+        
+        # 2. Check password against the secure hash
+        is_password_correct = bcrypt.checkpw(typed_password_bytes, HASHED_ADMIN_PASSWORD)
+        print(f"Did the password match the hash? {is_password_correct}")
+        
+        # 3. Grant or Deny Access
+        if credentials.username == "admin" and is_password_correct:
+            print("✅ Login successful! Generating JWT token...")
+            token = create_access_token(data={"sub": 1, "role": "admin"})
+            return {"access_token": token, "token_type": "bearer"}
+        else:
+            print("❌ Login failed: Username or password mismatch.")
+            raise HTTPException(status_code=401, detail="Incorrect username or password")
+            
+    except Exception as e:
+        # This will catch ANY hidden crashes and print them to your terminal
+        print(f"❌ SERVER CRASH DURING LOGIN: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        
+# @app.post("/add-department/")
+# def add_department(dept: DeptCreate):
+#     conn = get_db_connection(); cursor = conn.cursor()
+#     try:
+#         cursor.execute("INSERT INTO departments (name) VALUES (%s)", (dept.name,))
+#         conn.commit()
+#         return {"success": True, "message": "Department added successfully"}
+#     except errors.UniqueViolation:
+#         conn.rollback(); raise HTTPException(status_code=400, detail="Department already exists")
+#     except Exception as e:
+#         conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+#     finally: cursor.close(); release_db_connection(conn)
+
+
+
 @app.post("/add-department/")
-def add_department(dept: DeptCreate):
+def add_department(dept: DeptCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO departments (name) VALUES (%s)", (dept.name,))
@@ -97,14 +185,25 @@ def add_department(dept: DeptCreate):
         conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
     finally: cursor.close(); release_db_connection(conn)
 
-@app.get("/get-departments/")
-def get_departments():
-    conn = get_db_connection(); cursor = conn.cursor()
-    try: cursor.execute("SELECT * FROM departments ORDER BY id ASC"); return {"data": cursor.fetchall()}
-    finally: cursor.close(); release_db_connection(conn)
+
+# @app.delete("/delete-department/{dept_id}")
+# def delete_department(dept_id: int, user: dict = Depends(require_admin)):
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#     try:
+#         cursor.execute("DELETE FROM departments WHERE id = %s RETURNING id", (dept_id,))
+#         if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Department not found")
+#         conn.commit()
+#         return {"success": True, "message": "Department deleted"}
+#     except Exception as e:
+#         conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+#     finally: cursor.close(); release_db_connection(conn)
+
+
+
 
 @app.delete("/delete-department/{dept_id}")
-def delete_department(dept_id: int):
+def delete_department(dept_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("DELETE FROM departments WHERE id = %s RETURNING id", (dept_id,))
@@ -114,8 +213,18 @@ def delete_department(dept_id: int):
         conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
     finally: cursor.close(); release_db_connection(conn)
 
+
+
+
+@app.get("/get-departments/")
+def get_departments(user: dict = Depends(require_admin)):
+    conn = get_db_connection(); cursor = conn.cursor()
+    try: cursor.execute("SELECT * FROM departments ORDER BY id ASC"); return {"data": cursor.fetchall()}
+    finally: cursor.close(); release_db_connection(conn)
+
+
 @app.post("/add-faculty/")
-def add_faculty(faculty: FacultyCreate):
+def add_faculty(faculty: FacultyCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO faculties (department_id, name, max_weekly_hours) VALUES (%s, %s, %s)", 
@@ -126,7 +235,7 @@ def add_faculty(faculty: FacultyCreate):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/get-faculties/")
-def get_faculties():
+def get_faculties(user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("SELECT f.id, f.name, f.max_weekly_hours, f.department_id, d.name AS department_name FROM faculties f JOIN departments d ON f.department_id = d.id ORDER BY f.id ASC")
@@ -147,7 +256,7 @@ def get_faculties():
     finally: cursor.close(); release_db_connection(conn)
 
 @app.delete("/delete-faculty/{faculty_id}")
-def delete_faculty(faculty_id: int):
+def delete_faculty(faculty_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("DELETE FROM faculties WHERE id = %s RETURNING id", (faculty_id,))
@@ -160,7 +269,7 @@ def delete_faculty(faculty_id: int):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.put("/edit-faculty/{faculty_id}")
-def edit_faculty(faculty_id: int, faculty: FacultyCreate):
+def edit_faculty(faculty_id: int, faculty: FacultyCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("UPDATE faculties SET name = %s, max_weekly_hours = %s, department_id = %s WHERE id = %s RETURNING id", 
@@ -172,7 +281,7 @@ def edit_faculty(faculty_id: int, faculty: FacultyCreate):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.post("/add-room/")
-def add_room(room: RoomCreate):
+def add_room(room: RoomCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -185,13 +294,13 @@ def add_room(room: RoomCreate):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/get-rooms/")
-def get_rooms():
+def get_rooms(user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try: cursor.execute("SELECT * FROM rooms ORDER BY name ASC"); return {"data": cursor.fetchall()}
     finally: cursor.close(); release_db_connection(conn)
 
 @app.put("/edit-room/{room_id}")
-def edit_room(room_id: int, room: RoomCreate):
+def edit_room(room_id: int, room: RoomCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -203,7 +312,7 @@ def edit_room(room_id: int, room: RoomCreate):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.delete("/delete-room/{room_id}")
-def delete_room(room_id: int):
+def delete_room(room_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("DELETE FROM rooms WHERE id = %s RETURNING id", (room_id,))
@@ -215,7 +324,7 @@ def delete_room(room_id: int):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.post("/add-batch/")
-def add_batch(batch: BatchCreate):
+def add_batch(batch: BatchCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     mentor_val = batch.mentor_id if batch.mentor_id and batch.mentor_id > 0 else None
     try:
@@ -226,9 +335,11 @@ def add_batch(batch: BatchCreate):
         conn.rollback(); raise HTTPException(status_code=400, detail="A batch with this name already exists in this department.")
     except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
     finally: cursor.close(); release_db_connection(conn)
-
+    
+    
+    
 @app.get("/get-batches/{department_id}")
-def get_batches(department_id: int):
+def get_batches(department_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -239,7 +350,7 @@ def get_batches(department_id: int):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.put("/edit-batch/{batch_id}")
-def edit_batch(batch_id: int, batch: BatchCreate):
+def edit_batch(batch_id: int, batch: BatchCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     mentor_val = batch.mentor_id if batch.mentor_id and batch.mentor_id > 0 else None
     try:
@@ -251,9 +362,10 @@ def edit_batch(batch_id: int, batch: BatchCreate):
         conn.rollback(); raise HTTPException(status_code=400, detail="Another batch with this name already exists.")
     except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
     finally: cursor.close(); release_db_connection(conn)
-
+    
+    
 @app.delete("/delete-batch/{batch_id}")
-def delete_batch(batch_id: int):
+def delete_batch(batch_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("DELETE FROM batches WHERE id = %s RETURNING id", (batch_id,))
@@ -265,7 +377,7 @@ def delete_batch(batch_id: int):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.post("/add-subject/")
-def add_subject(subject: SubjectCreate):
+def add_subject(subject: SubjectCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO subjects (name, subject_type, required_sessions, department_id, semester) VALUES (%s, %s, %s, %s, %s)", 
@@ -275,7 +387,7 @@ def add_subject(subject: SubjectCreate):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/get-subjects/{department_id}")
-def get_subjects(department_id: int):
+def get_subjects(department_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("SELECT s.id, s.name, s.subject_type, s.required_sessions, s.semester, d.name AS department_name FROM subjects s JOIN departments d ON s.department_id = d.id WHERE s.department_id = %s ORDER BY s.name ASC", (department_id,))
@@ -283,7 +395,7 @@ def get_subjects(department_id: int):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.put("/edit-subject/{subject_id}")
-def edit_subject(subject_id: int, subject: SubjectCreate):
+def edit_subject(subject_id: int, subject: SubjectCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("UPDATE subjects SET name = %s, subject_type = %s, required_sessions = %s, department_id = %s, semester = %s WHERE id = %s RETURNING id", 
@@ -294,7 +406,7 @@ def edit_subject(subject_id: int, subject: SubjectCreate):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.delete("/delete-subject/{subject_id}")
-def delete_subject(subject_id: int):
+def delete_subject(subject_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("DELETE FROM subjects WHERE id = %s RETURNING id", (subject_id,))
@@ -304,9 +416,10 @@ def delete_subject(subject_id: int):
         conn.rollback(); raise HTTPException(status_code=400, detail="Cannot delete. Scheduled in Timetable.")
     except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
     finally: cursor.close(); release_db_connection(conn)
-
+    
+    
 @app.post("/add-expertise/")
-def add_expertise(exp: ExpertiseCreate):
+def add_expertise(exp: ExpertiseCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -318,7 +431,7 @@ def add_expertise(exp: ExpertiseCreate):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/get-expertise/{faculty_id}")
-def get_expertise(faculty_id: int):
+def get_expertise(faculty_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("SELECT subject_id AS id, competency_tier FROM faculty_expertise WHERE faculty_id = %s", (faculty_id,))
@@ -458,7 +571,7 @@ def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic
 # TIMETABLE GENERATION (MASTER ENGINE)
 # =========================================================
 @app.post("/generate-timetable/{department_id}")
-def generate_timetable(department_id: int, payload: GenerateRequest):
+def generate_timetable(department_id: int, payload: GenerateRequest, user: dict = Depends(require_admin)):
     conn = get_db_connection()
     cursor = conn.cursor()  
     try:
@@ -711,7 +824,7 @@ def generate_timetable(department_id: int, payload: GenerateRequest):
         release_db_connection(conn)
 
 @app.post("/save-timetable/")
-def save_timetable(payload: SaveTimetableRequest):
+def save_timetable(payload: SaveTimetableRequest, user: dict = Depends(require_admin)):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -747,7 +860,7 @@ def save_timetable(payload: SaveTimetableRequest):
         release_db_connection(conn)
                         
 @app.post("/validate-swap/")
-def validate_timetable_swap(payload: SwapValidationRequest):
+def validate_timetable_swap(payload: SwapValidationRequest, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("SELECT id FROM timetables WHERE faculty_id = %s AND day_of_week = %s AND timeslot = %s", (payload.faculty_id, payload.new_day, payload.new_timeslot))
@@ -758,7 +871,7 @@ def validate_timetable_swap(payload: SwapValidationRequest):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.put("/update-timetable-slot/")
-def update_timetable_slot(payload: UpdateSlotRequest):
+def update_timetable_slot(payload: UpdateSlotRequest, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("UPDATE timetables SET day_of_week = %s, timeslot = %s WHERE id = %s", (payload.new_day, payload.new_timeslot, payload.record_id))
@@ -770,11 +883,10 @@ def update_timetable_slot(payload: UpdateSlotRequest):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/view-timetable/")
-def view_timetable(department_id: int = None, batch_id: int = None):
+def view_timetable(department_id: Optional[int] = None, batch_id: Optional[int] = None, user: dict = Depends(require_admin)):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # THE FIX: Added t.department_id and t.subject_id so the frontend has them for saving!
         query = """
             SELECT t.id, t.department_id, t.batch_id, t.subject_id, t.faculty_id, t.room_id, t.notes, t.day_of_week, t.timeslot, b.name AS batch, s.name AS subject, r.name AS room, f.name AS faculty
             FROM timetables t 
@@ -794,12 +906,14 @@ def view_timetable(department_id: int = None, batch_id: int = None):
             
         cursor.execute(query, tuple(params))
         return {"success": True, "data": cursor.fetchall()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     finally: 
         cursor.close()
         release_db_connection(conn)
                 
 @app.delete("/delete-timetable/{batch_id}")
-def delete_timetable(batch_id: int):
+def delete_timetable(batch_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("DELETE FROM timetables WHERE batch_id = %s", (batch_id,))
@@ -811,7 +925,7 @@ def delete_timetable(batch_id: int):
 # NEW: FETCH PUBLISHED ANALYSIS
 # =========================================================
 @app.get("/analyze-timetable/{batch_id}")
-def analyze_published_timetable(batch_id: int):
+def analyze_published_timetable(batch_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -852,7 +966,7 @@ def analyze_published_timetable(batch_id: int):
 
 
 @app.get("/dashboard-stats/global")
-def get_global_dashboard_stats():
+def get_global_dashboard_stats(user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     import math
     try:

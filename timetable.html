@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartSched Uni - Academic Timetables</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <script src="global.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -475,10 +477,10 @@
       </div>
     </div>
 
-    <script src="global.js"></script>
-
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
       let allSchedules = [];
       let CURRENT_DEPT_ID = null;
       let isDraftMode = false;
@@ -589,7 +591,7 @@
         )
           return;
         try {
-          const response = await fetch(
+          const response = await apiFetch(
             `${API_URL}/delete-timetable/${batchId}`,
             { method: "DELETE" },
           );
@@ -624,7 +626,7 @@
         batchSelect.innerHTML = `<option value="" disabled>Select a Batch...</option>`;
 
         try {
-          const batchRes = await fetch(`${API_URL}/get-batches/${deptId}`);
+          const batchRes = await apiFetch(`${API_URL}/get-batches/${deptId}`);
           const batchData = await batchRes.json();
           if (batchData.data.length === 0) {
             document.getElementById("gridContainer").innerHTML =
@@ -750,7 +752,7 @@
           try {
             const selectedRecords =
               draftOptions[window.currentlySelectedDraftIndex].records;
-            const response = await fetch(`${API_URL}/save-timetable/`, {
+            const response = await apiFetch(`${API_URL}/save-timetable/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ records: selectedRecords, notes: notes }),
@@ -782,7 +784,7 @@
 
         batchSelect.innerHTML = `<option value="" disabled selected>Loading batches...</option>`;
         try {
-          const batchRes = await fetch(
+          const batchRes = await apiFetch(
             `${API_URL}/get-batches/${CURRENT_DEPT_ID}`,
           );
           const batchData = await batchRes.json();
@@ -790,7 +792,7 @@
           batchData.data.forEach((b) => {
             batchSelect.innerHTML += `<option value="${b.id}" data-batchname="${b.name}">${b.name}</option>`;
           });
-          const tableRes = await fetch(
+          const tableRes = await apiFetch(
             `${API_URL}/view-timetable/?department_id=${CURRENT_DEPT_ID}`,
           );
           const tableData = await tableRes.json();
@@ -836,7 +838,7 @@
             }
           } else {
             try {
-              const response = await fetch(
+              const response = await apiFetch(
                 `${API_URL}/analyze-timetable/${batchId}`,
               );
               const result = await response.json();
@@ -1068,15 +1070,18 @@
         if (!isDraftMode) {
           try {
             draggedHtmlElement.style.opacity = "0.5";
-            const response = await fetch(`${API_URL}/update-timetable-slot/`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                record_id: parseInt(recordId),
-                new_day: newDay,
-                new_timeslot: newTimeSlot,
-              }),
-            });
+            const response = await apiFetch(
+              `${API_URL}/update-timetable-slot/`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  record_id: parseInt(recordId),
+                  new_day: newDay,
+                  new_timeslot: newTimeSlot,
+                }),
+              },
+            );
             const result = await response.json();
             if (!response.ok || result.success === false) {
               alert("Error: " + (result.detail || result.message));
@@ -1241,7 +1246,7 @@
           }, 100);
         } else {
           try {
-            const response = await fetch(`${API_URL}/save-timetable/`, {
+            const response = await apiFetch(`${API_URL}/save-timetable/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({

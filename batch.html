@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartSched Uni - Student Batches</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <script src="global.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -472,7 +474,9 @@
     </div>
 
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
       let CURRENT_DEPT_ID = null;
       let globalBatchesData = {};
       let currentlyEditingBatchId = null;
@@ -491,7 +495,7 @@
       // --- 2. LOAD MENTORS FOR THE ADD/EDIT MODAL ---
       async function loadMentors() {
         try {
-          const facRes = await fetch(`${API_URL}/get-faculties/`);
+          const facRes = await apiFetch(`${API_URL}/get-faculties/`);
           const facData = await facRes.json();
 
           // Filter faculties so we only show mentors from the active department
@@ -523,7 +527,7 @@
         }
 
         try {
-          const response = await fetch(
+          const response = await apiFetch(
             `${API_URL}/get-batches/${CURRENT_DEPT_ID}`,
           );
           const data = await response.json();
@@ -600,7 +604,7 @@
           };
 
           try {
-            const response = await fetch(`${API_URL}/add-batch/`, {
+            const response = await apiFetch(`${API_URL}/add-batch/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(batchData),
@@ -677,7 +681,7 @@
           };
 
           try {
-            const response = await fetch(
+            const response = await apiFetch(
               `${API_URL}/edit-batch/${currentlyEditingBatchId}`,
               {
                 method: "PUT",
@@ -724,7 +728,7 @@
           if (!confirmed) return;
 
           try {
-            const response = await fetch(
+            const response = await apiFetch(
               `${API_URL}/delete-batch/${currentlyEditingBatchId}`,
               { method: "DELETE" },
             );
@@ -796,6 +800,5 @@
         if (e.target === editModal) closeEditModal();
       });
     </script>
-    <script src="global.js"></script>
   </body>
 </html>

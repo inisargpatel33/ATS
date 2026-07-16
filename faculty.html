@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartSched Uni - Faculty Management</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <script src="global.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -385,7 +387,9 @@
     </div>
 
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
       let CURRENT_DEPT_ID = null;
       let currentFacultyId = null;
 
@@ -413,7 +417,7 @@
         }
 
         try {
-          const response = await fetch(`${API_URL}/get-faculties/`);
+          const response = await apiFetch(`${API_URL}/get-faculties/`);
           const result = await response.json();
 
           // Filter faculties to only show ones belonging to the global department
@@ -495,7 +499,7 @@
         };
 
         try {
-          const response = await fetch(`${API_URL}/add-faculty/`, {
+          const response = await apiFetch(`${API_URL}/add-faculty/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -534,10 +538,12 @@
         }, 10);
 
         // Fetch subjects ONLY for the current global department
-        const res = await fetch(`${API_URL}/get-subjects/${CURRENT_DEPT_ID}`);
+        const res = await apiFetch(
+          `${API_URL}/get-subjects/${CURRENT_DEPT_ID}`,
+        );
         const data = await res.json();
 
-        const currentExpRes = await fetch(
+        const currentExpRes = await apiFetch(
           `${API_URL}/get-expertise/${facultyId}`,
         );
         const currentExpData = await currentExpRes.json();
@@ -568,7 +574,7 @@
           const subId = select.id.split("-")[1];
           const tier = parseFloat(select.value);
           if (tier > 0) {
-            await fetch(`${API_URL}/add-expertise/`, {
+            await apiFetch(`${API_URL}/add-expertise/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -599,7 +605,7 @@
         if (!confirmed) return;
 
         try {
-          const response = await fetch(`${API_URL}/delete-faculty/${id}`, {
+          const response = await apiFetch(`${API_URL}/delete-faculty/${id}`, {
             method: "DELETE",
           });
 
@@ -688,7 +694,7 @@
           };
 
           try {
-            const response = await fetch(
+            const response = await apiFetch(
               `${API_URL}/edit-faculty/${editingFacultyId}`,
               {
                 method: "PUT",
@@ -715,6 +721,5 @@
           }
         });
     </script>
-    <script src="global.js"></script>
   </body>
 </html>

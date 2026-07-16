@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartSched Uni - Rooms & Infrastructure</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <script src="global.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -691,7 +693,9 @@
 
     <!-- MAIN SCRIPT -->
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
       let globalRoomsData = {};
       let currentlyEditingRoomId = null;
 
@@ -708,7 +712,7 @@
       // --- 1. FETCH GLOBAL ROOMS ---
       async function fetchRooms() {
         try {
-          const response = await fetch(`${API_URL}/get-rooms/`);
+          const response = await apiFetch(`${API_URL}/get-rooms/`);
           const data = await response.json();
 
           roomsGrid.innerHTML = "";
@@ -796,7 +800,7 @@
           };
 
           try {
-            const response = await fetch(`${API_URL}/add-room/`, {
+            const response = await apiFetch(`${API_URL}/add-room/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(roomData),
@@ -895,7 +899,7 @@
           };
 
           try {
-            const response = await fetch(
+            const response = await apiFetch(
               `${API_URL}/edit-room/${currentlyEditingRoomId}`,
               {
                 method: "PUT",
@@ -937,7 +941,7 @@
           if (!confirmed) return;
 
           try {
-            const response = await fetch(
+            const response = await apiFetch(
               `${API_URL}/delete-room/${currentlyEditingRoomId}`,
               { method: "DELETE" },
             );

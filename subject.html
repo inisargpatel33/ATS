@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartSched Uni - Subject Directory</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <script src="global.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -463,7 +465,9 @@
 
     <!-- Script Block -->
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
       let CURRENT_DEPT_ID = null;
       let globalSubjectsData = {};
       let currentlyEditingSubjectId = null;
@@ -485,7 +489,7 @@
         }
 
         try {
-          const response = await fetch(
+          const response = await apiFetch(
             `${API_URL}/get-subjects/${CURRENT_DEPT_ID}`,
           );
           const data = await response.json();
@@ -557,7 +561,7 @@
           };
 
           try {
-            const response = await fetch(`${API_URL}/add-subject/`, {
+            const response = await apiFetch(`${API_URL}/add-subject/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(subjectData),
@@ -632,7 +636,7 @@
           };
 
           try {
-            const response = await fetch(
+            const response = await apiFetch(
               `${API_URL}/edit-subject/${currentlyEditingSubjectId}`,
               {
                 method: "PUT",
@@ -675,7 +679,7 @@
           if (!confirmed) return;
 
           try {
-            const response = await fetch(
+            const response = await apiFetch(
               `${API_URL}/delete-subject/${currentlyEditingSubjectId}`,
               { method: "DELETE" },
             );
@@ -720,7 +724,5 @@
         if (e.target === editModal) closeEditModal();
       });
     </script>
-
-    <script src="global.js"></script>
   </body>
 </html>

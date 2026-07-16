@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartSched Uni - Department Management</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <script src="global.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -385,7 +387,9 @@
 
     <!-- Frontend Logic for Fetch, Add, Edit, Delete -->
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
       const newDeptForm = document.getElementById("newDeptForm");
       const deptTableBody = document.getElementById("deptTableBody");
       const statusMessage = document.getElementById("statusMessage");
@@ -393,7 +397,7 @@
       // 1. Fetch & Render Table
       async function loadDepartments() {
         try {
-          const response = await fetch(`${API_URL}/get-departments/`);
+          const response = await apiFetch(`${API_URL}/get-departments/`);
           const result = await response.json();
           deptTableBody.innerHTML = "";
 
@@ -426,7 +430,7 @@
         statusMessage.classList.add("hidden");
 
         try {
-          const response = await fetch(`${API_URL}/add-department/`, {
+          const response = await apiFetch(`${API_URL}/add-department/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: deptName }),
@@ -467,9 +471,12 @@
         if (!confirmed) return;
 
         try {
-          const response = await fetch(`${API_URL}/delete-department/${id}`, {
-            method: "DELETE",
-          });
+          const response = await apiFetch(
+            `${API_URL}/delete-department/${id}`,
+            {
+              method: "DELETE",
+            },
+          );
           if (response.ok) {
             SmartAlert(
               "success",

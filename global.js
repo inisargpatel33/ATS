@@ -1,44 +1,84 @@
 // global.js
-const GLOBAL_API_URL = "http://127.0.0.1:8000";
 
-document.addEventListener("DOMContentLoaded", async () => {
-  const globalSelect = document.getElementById("globalDeptSelect");
-  if (!globalSelect) return; // Exit if header isn't on this page
+const GLOBAL_API_URL = window.location.origin.includes(":5500")
+  ? "http://127.0.0.1:8000"
+  : window.location.origin;
+
+// =========================================================
+// AUTHENTICATION GATEKEEPER
+// =========================================================
+if (!window.location.pathname.includes("login.html")) {
+  const token = localStorage.getItem("access_token");
+  if (!token) {
+    window.location.href = "login.html";
+  }
+}
+
+// =========================================================
+// SMART API FETCH (Automatically attaches the JWT Token)
+// =========================================================
+window.apiFetch = async function (url, options = {}) {
+  const token = localStorage.getItem("access_token");
+
+  options.headers = options.headers || {};
+  options.headers["Content-Type"] =
+    options.headers["Content-Type"] || "application/json";
+
+  if (token) {
+    const trimmedToken = token.trim();
+    options.headers["Authorization"] = `Bearer ${trimmedToken}`;
+  } else {
+    console.warn("apiFetch: No access token found in localStorage.");
+  }
 
   try {
-    // 1. Fetch departments from database
-    const res = await fetch(`${GLOBAL_API_URL}/get-departments/`);
-    const data = await res.json();
+    const response = await fetch(url, options);
+    if (response.status === 401) {
+      console.warn("apiFetch: Unauthorized response from", url);
+      alert("Session expired or unauthorized. Please log in again.");
+      localStorage.removeItem("access_token");
+      window.location.href = "login.html";
+      return null;
+    }
+    return response;
+  } catch (error) {
+    console.error("Network Error:", error);
+    throw error;
+  }
+};
+// =========================================================
+// DEPARTMENT SELECTOR LOGIC
+// =========================================================
+document.addEventListener("DOMContentLoaded", async () => {
+  const globalSelect = document.getElementById("globalDeptSelect");
+  if (!globalSelect) return;
 
-    // 2. Populate the dropdown
+  try {
+    // NOTE: We now use apiFetch instead of standard fetch!
+    const res = await apiFetch(`${GLOBAL_API_URL}/get-departments/`);
+    if (!res) return; // Stop if kicked out
+
+    const data = await res.json();
     globalSelect.innerHTML = "";
     data.data.forEach((dept) => {
       globalSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
     });
 
-    // 3. Check browser memory (localStorage) for a previously selected department
     const savedDept = localStorage.getItem("activeDeptId");
-
     if (savedDept && data.data.some((d) => d.id == savedDept)) {
-      // If we remember one, set it
       globalSelect.value = savedDept;
     } else if (data.data.length > 0) {
-      // Otherwise, default to the very first department
       globalSelect.value = data.data[0].id;
       localStorage.setItem("activeDeptId", data.data[0].id);
     }
 
-    // 4. Alert the current page what the active department is
     window.dispatchEvent(
       new CustomEvent("departmentReady", { detail: globalSelect.value }),
     );
 
-    // 5. When the user clicks the dropdown and changes it
     globalSelect.addEventListener("change", (e) => {
       const newId = e.target.value;
-      // Save to memory
       localStorage.setItem("activeDeptId", newId);
-      // Alert the page to reload its data!
       window.dispatchEvent(
         new CustomEvent("departmentReady", { detail: newId }),
       );

@@ -470,7 +470,9 @@
     </nav>
 
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
       let workloadChart = null;
 
       // Fetch the global data IMMEDIATELY when the page loads!
@@ -481,7 +483,7 @@
       async function fetchGlobalDashboardData() {
         try {
           // Pointing to the new /global endpoint (No Department ID required!)
-          const res = await fetch(`${API_URL}/dashboard-stats/global`);
+          const res = await apiFetch(`${API_URL}/dashboard-stats/global`);
           const data = await res.json();
 
           if (data.success) {

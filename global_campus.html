@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartSched Uni - Global Campus View</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+
+    <script src="global.js"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              surface: "#fdf8f8",
+              "on-surface-variant": "#444748",
+              primary: "#181919",
+              secondary: "#456273",
+              "secondary-container": "#c8e7fb",
+              "tertiary-fixed": "#d8e8c7",
+              error: "#ba1a1a",
+              "error-container": "#ffdad6",
+              "surface-container": "#f1edec",
+              "surface-variant": "#e5e2e1",
+            },
+            fontFamily: {
+              "headline-md": ["Bricolage Grotesque"],
+              "display-lg": ["Bricolage Grotesque"],
+              "body-md": ["Plus Jakarta Sans"],
+              "label-md": ["Plus Jakarta Sans"],
+              "label-sm": ["Plus Jakarta Sans"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings:
+          "FILL" 0,
+          "wght" 600,
+          "GRAD" 0,
+          "opsz" 24;
+        display: inline-block;
+        line-height: 1;
+      }
+      .hand-drawn-border-sm {
+        border: 2px solid #181919;
+        border-radius: 12px 4px 14px 5px/4px 12px 5px 14px;
+      }
+      .offset-shadow-sm {
+        box-shadow: 4px 4px 0px 0px rgba(24, 25, 25, 1);
+      }
+      ::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1edec;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #181919;
+        border-radius: 4px;
+      }
+
+      /* Time Button Styles */
+      .time-btn {
+        transition: all 0.2s ease-in-out;
+      }
+      .time-btn.active {
+        background-color: #181919;
+        color: #ffffff;
+        box-shadow: 4px 4px 0px 0px #c8e7fb;
+        transform: translateY(-2px);
+      }
+
+      /* Circular Gauge */
+      .circular-chart {
+        display: block;
+        margin: 0 auto;
+        max-width: 80%;
+        max-height: 250px;
+      }
+      .circle-bg {
+        fill: none;
+        stroke: #e5e2e1;
+        stroke-width: 3.8;
+      }
+      .circle {
+        fill: none;
+        stroke-width: 2.8;
+        stroke-linecap: round;
+        transition: stroke-dasharray 0.5s ease;
+      }
+      .percentage {
+        fill: #181919;
+        font-family: "Bricolage Grotesque";
+        font-size: 0.5em;
+        text-anchor: middle;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-surface text-primary font-body-md overflow-x-hidden flex h-screen"
+  >
+    <aside
+      class="hidden md:flex flex-col h-screen w-64 flex-shrink-0 border-r-2 border-primary bg-surface py-6 gap-2 z-40 shadow-[6px_0px_0px_0px_rgba(24,25,25,0.05)]"
+    >
+      <div class="px-6 mb-8">
+        <h1 class="font-headline-md text-2xl text-primary">Admin Portal</h1>
+        <p class="font-label-sm text-on-surface-variant">
+          Academic Year 2024-25
+        </p>
+      </div>
+      <nav class="flex-1 flex flex-col gap-1 overflow-y-auto">
+        <a
+          href="index.html"
+          class="text-on-surface-variant hover:text-primary flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-lg hover:bg-surface-container-low transition-all active:scale-95"
+          ><span class="material-symbols-outlined">dashboard</span
+          ><span class="font-label-md">Dashboard</span></a
+        >
+        <a
+          href="global_campus.html"
+          class="bg-tertiary-fixed text-primary border-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,1)] rounded-lg mx-2 my-1 px-4 py-3 flex items-center gap-3 active:scale-95 transition-transform"
+          ><span class="material-symbols-outlined">public</span
+          ><span class="font-label-md font-bold">Campus View</span></a
+        >
+      </nav>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden bg-surface">
+      <header
+        class="flex-shrink-0 bg-surface flex justify-between items-center w-full px-4 md:px-8 py-4 border-b-2 border-primary shadow-[4px_4px_0px_0px_rgba(24,25,25,0.1)] z-30"
+      >
+        <div class="flex items-center gap-3">
+          <span class="material-symbols-outlined text-3xl text-secondary"
+            >public</span
+          >
+          <span
+            class="font-display-lg text-2xl md:text-3xl text-primary tracking-tight"
+            >God-Level Campus Matrix</span
+          >
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="flex gap-2">
+            <select
+              id="dayFilter"
+              class="bg-white hand-drawn-border-sm p-2 text-label-md focus:outline-none cursor-pointer font-bold"
+            >
+              <option value="Mon">Monday</option>
+              <option value="Tue">Tuesday</option>
+              <option value="Wed">Wednesday</option>
+              <option value="Thu">Thursday</option>
+              <option value="Fri">Friday</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <div class="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col gap-6">
+        <div
+          class="bg-white hand-drawn-border-sm offset-shadow-sm p-4 w-full overflow-x-auto relative z-10 flex-shrink-0 mb-2"
+        >
+          <div
+            class="flex items-center gap-2 min-w-max"
+            id="timeScrubber"
+          ></div>
+        </div>
+
+        <div
+          class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start relative z-0"
+        >
+          <div
+            class="lg:col-span-9 bg-white hand-drawn-border-sm offset-shadow-sm p-6 min-h-[500px]"
+          >
+            <div
+              class="flex justify-between items-center mb-6 border-b-2 border-surface-variant pb-3"
+            >
+              <h3
+                class="font-headline-md text-2xl text-primary flex items-center gap-2"
+              >
+                <span class="material-symbols-outlined text-secondary"
+                  >grid_view</span
+                >
+                Room Status Matrix
+              </h3>
+              <div class="flex gap-4">
+                <span class="flex items-center gap-1 text-sm font-label-md"
+                  ><div class="w-3 h-3 rounded-full bg-error"></div>
+                  Occupied</span
+                >
+                <span class="flex items-center gap-1 text-sm font-label-md"
+                  ><div class="w-3 h-3 rounded-full bg-[#4b6b2d]"></div>
+                  Available</span
+                >
+              </div>
+            </div>
+
+            <div
+              id="roomMatrixGrid"
+              class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4"
+            ></div>
+          </div>
+
+          <div class="lg:col-span-3 flex flex-col gap-6">
+            <div
+              class="bg-surface-container-low hand-drawn-border-sm offset-shadow-sm p-6 text-center"
+            >
+              <h4
+                class="font-label-md uppercase tracking-wider text-on-surface-variant font-bold text-sm mb-4"
+              >
+                Live Campus Load
+              </h4>
+
+              <svg viewBox="0 0 36 36" class="circular-chart text-secondary">
+                <path
+                  class="circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  id="gaugeArc"
+                  class="circle"
+                  stroke="#181919"
+                  stroke-dasharray="0, 100"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <text x="18" y="20.35" class="percentage" id="utilizationText">
+                  0%
+                </text>
+              </svg>
+
+              <p
+                class="font-body-md text-primary mt-4 italic"
+                id="utilizationSubtext"
+              >
+                Analyzing capacity...
+              </p>
+            </div>
+
+            <div class="bg-white hand-drawn-border-sm p-4 flex flex-col gap-3">
+              <div
+                class="flex justify-between items-center border-b border-surface-variant pb-2"
+              >
+                <span class="font-label-md text-on-surface-variant"
+                  >Total Rooms Checked</span
+                >
+                <span
+                  class="font-headline-md text-xl text-primary"
+                  id="statTotal"
+                  >0</span
+                >
+              </div>
+              <div
+                class="flex justify-between items-center border-b border-surface-variant pb-2"
+              >
+                <span class="font-label-md text-on-surface-variant"
+                  >Classes In Session</span
+                >
+                <span
+                  class="font-headline-md text-xl text-error"
+                  id="statActive"
+                  >0</span
+                >
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="font-label-md text-on-surface-variant"
+                  >Empty Rooms</span
+                >
+                <span
+                  class="font-headline-md text-xl text-[#4b6b2d]"
+                  id="statEmpty"
+                  >0</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
+
+      // State
+      let allRooms = [];
+      let allTimetables = [];
+      let currentDay = "Mon";
+      let currentTimePrefix = "08:00 AM";
+
+      // Valid timeslots used in generation matrix
+      const timeslots = [
+        "08:00 AM",
+        "09:00 AM",
+        "10:00 AM",
+        "11:00 AM",
+        "01:00 PM",
+        "02:00 PM",
+        "03:00 PM",
+        "04:00 PM",
+        "05:00 PM",
+      ];
+
+      document.addEventListener("DOMContentLoaded", async () => {
+        buildTimeScrubber();
+        await fetchInitialData();
+        updateMatrix();
+
+        // Listener for Day filter
+        document.getElementById("dayFilter").addEventListener("change", (e) => {
+          currentDay = e.target.value;
+          updateMatrix();
+        });
+      });
+
+      function buildTimeScrubber() {
+        const container = document.getElementById("timeScrubber");
+        timeslots.forEach((time) => {
+          const btn = document.createElement("button");
+          btn.className = `time-btn px-6 py-3 border-2 border-primary rounded-lg font-headline-md text-lg min-w-[120px] ${time === currentTimePrefix ? "active" : "bg-white text-primary hover:bg-surface-container"}`;
+          btn.innerText = time;
+          btn.onclick = () => {
+            // Update active class
+            document.querySelectorAll(".time-btn").forEach((b) => {
+              b.classList.remove("active");
+              b.classList.add("bg-white", "text-primary");
+            });
+            btn.classList.add("active");
+            btn.classList.remove("bg-white", "text-primary");
+
+            // Update state and UI
+            currentTimePrefix = time;
+            updateMatrix();
+          };
+          container.appendChild(btn);
+        });
+      }
+
+      async function fetchInitialData() {
+        try {
+          // 1. Get All Rooms (Entire Campus)
+          const roomsRes = await apiFetch(`${API_URL}/get-rooms/`);
+          if (!roomsRes) return;
+          const roomsData = await roomsRes.json();
+          allRooms = roomsData.data.filter((r) => r.is_active);
+
+          // 2. Get All Timetables (Global)
+          const ttRes = await apiFetch(`${API_URL}/view-timetable/`);
+          if (!ttRes) return;
+          const ttData = await ttRes.json();
+          if (ttData.success) allTimetables = ttData.data;
+        } catch (e) {
+          console.error("Failed to fetch global data:", e);
+        }
+      }
+
+      function updateMatrix() {
+        const grid = document.getElementById("roomMatrixGrid");
+        grid.innerHTML = "";
+
+        let occupiedCount = 0;
+
+        // Find all classes happening right now across the university based on the Day Filter and Time Scrubber
+        const currentClasses = allTimetables.filter(
+          (t) =>
+            t.day_of_week === currentDay &&
+            t.timeslot.startsWith(currentTimePrefix),
+        );
+
+        allRooms.forEach((room) => {
+          // Check if this room is in the current classes array
+          const activeClass = currentClasses.find((c) => c.room_id === room.id);
+
+          if (activeClass) {
+            occupiedCount++;
+            grid.innerHTML += `
+                  <div class="bg-error-container border-2 border-error rounded-xl p-4 flex flex-col shadow-sm relative overflow-hidden group">
+                     <div class="absolute top-0 right-0 bg-error text-white px-2 py-1 text-[10px] font-bold rounded-bl-lg">OCCUPIED</div>
+                     <span class="material-symbols-outlined text-error text-3xl mb-2 opacity-80">meeting_room</span>
+                     <h4 class="font-headline-md text-primary text-lg truncate" title="${room.name}">${room.name}</h4>
+                     <p class="font-label-sm text-error font-bold text-xs uppercase mb-2 truncate">${activeClass.subject}</p>
+                     <div class="mt-auto space-y-1 bg-white/50 p-2 rounded border border-error/20">
+                        <p class="font-label-sm text-primary text-xs truncate flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">school</span> ${activeClass.faculty}</p>
+                        <p class="font-label-sm text-primary text-xs truncate flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">groups</span> ${activeClass.batch}</p>
+                     </div>
+                  </div>
+               `;
+          } else {
+            grid.innerHTML += `
+                  <div class="bg-tertiary-fixed border-2 border-[#668b3f] rounded-xl p-4 flex flex-col shadow-sm relative">
+                     <div class="absolute top-0 right-0 bg-[#668b3f] text-white px-2 py-1 text-[10px] font-bold rounded-bl-lg">AVAILABLE</div>
+                     <span class="material-symbols-outlined text-[#668b3f] text-3xl mb-2 opacity-80">door_open</span>
+                     <h4 class="font-headline-md text-primary text-lg truncate">${room.name}</h4>
+                     <p class="font-label-sm text-on-surface-variant text-xs mt-1">Capacity: ${room.capacity}</p>
+                     <div class="mt-auto pt-4">
+                        <p class="font-label-sm text-[#4b6b2d] text-xs font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check_circle</span> Ready to use</p>
+                     </div>
+                  </div>
+               `;
+          }
+        });
+
+        if (allRooms.length === 0) {
+          grid.innerHTML = `<div class="col-span-full p-8 text-center text-on-surface-variant font-label-md border-2 border-dashed border-outline-variant rounded-xl">No rooms configured in the database.</div>`;
+        }
+
+        updateGauge(occupiedCount, allRooms.length);
+      }
+
+      function updateGauge(occupied, total) {
+        document.getElementById("statTotal").innerText = total;
+        document.getElementById("statActive").innerText = occupied;
+        document.getElementById("statEmpty").innerText = total - occupied;
+
+        const percentage =
+          total === 0 ? 0 : Math.round((occupied / total) * 100);
+        document.getElementById("utilizationText").textContent =
+          `${percentage}%`;
+        // Update Arc Dash Array (stroke-dasharray="percentage, 100")
+        document
+          .getElementById("gaugeArc")
+          .setAttribute("stroke-dasharray", `${percentage}, 100`);
+
+        // Dynamic Subtext & Colors
+        const subtextEl = document.getElementById("utilizationSubtext");
+        const gaugeArc = document.getElementById("gaugeArc");
+
+        if (percentage >= 90) {
+          subtextEl.innerText = "Campus is at max capacity!";
+          subtextEl.className = "font-body-md font-bold mt-4 text-error";
+          gaugeArc.setAttribute("stroke", "#ba1a1a");
+        } else if (percentage >= 60) {
+          subtextEl.innerText = "High campus activity.";
+          subtextEl.className = "font-body-md mt-4 text-secondary";
+          gaugeArc.setAttribute("stroke", "#456273");
+        } else if (percentage > 0) {
+          subtextEl.innerText = "Normal scheduling load.";
+          subtextEl.className = "font-body-md mt-4 text-primary";
+          gaugeArc.setAttribute("stroke", "#181919");
+        } else {
+          subtextEl.innerText = "Campus is entirely quiet.";
+          subtextEl.className = "font-body-md mt-4 text-[#4b6b2d]";
+          gaugeArc.setAttribute("stroke", "#668b3f");
+        }
+      }
+    </script>
+  </body>
+</html>

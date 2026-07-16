@@ -6,6 +6,7 @@
     <title>SmartSched Uni - AI Dashboard</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -84,6 +85,7 @@
         box-shadow: 6px 6px 0px 0px #181919;
       }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="bg-surface text-primary font-body-md overflow-x-hidden">
     <aside
@@ -196,12 +198,22 @@
               Welcome back to your academic command center. Here is the live
               workload breakdown for the currently selected department.
             </p>
-            <div class="pt-4">
+            <div
+              class="pt-4 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
+            >
               <button
-                onclick="window.location.href = 'scheduler.html'"
+                onclick="window.location.href = 'schedular.html'"
                 class="bg-secondary text-on-secondary hover:bg-[#344d5a] font-label-md px-8 py-4 rounded-lg offset-shadow-sm active:scale-95 transition-all w-full sm:w-auto text-lg border-2 border-primary"
               >
                 Launch Scheduler
+              </button>
+
+              <button
+                onclick="window.location.href = 'global_campus.html'"
+                class="bg-tertiary-fixed text-primary hover:bg-[#c5d6b4] font-label-md px-8 py-4 rounded-lg offset-shadow-sm active:scale-95 transition-all w-full sm:w-auto text-lg border-2 border-primary flex items-center justify-center gap-2"
+              >
+                <span class="material-symbols-outlined">public</span>
+                Global Campus View
               </button>
             </div>
           </div>
@@ -514,9 +526,11 @@
         </div>
       </div>
     </main>
-
+    <script src="global.js"></script>
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const API_URL = window.location.origin.includes(":5500")
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
       let workloadChart = null;
       let globalFacultyLoadData = [];
 
@@ -527,7 +541,7 @@
 
       async function loadDepartmentsForChart() {
         try {
-          const res = await fetch(`${API_URL}/get-departments/`);
+          const res = await apiFetch(`${API_URL}/dashboard-stats/global`);
           const data = await res.json();
           const filter = document.getElementById("chartDeptFilter");
           data.data.forEach((dept) => {
@@ -540,7 +554,7 @@
 
       async function fetchGlobalDashboardData() {
         try {
-          const res = await fetch(`${API_URL}/dashboard-stats/global`);
+          const res = await apiFetch(`${API_URL}/dashboard-stats/global`);
           const data = await res.json();
 
           if (data.success) {

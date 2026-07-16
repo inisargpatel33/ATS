@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartSched Uni - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-[#fdf8f8] flex items-center justify-center h-screen">
+    <div
+      class="bg-white p-8 border-2 border-[#181919] rounded-xl shadow-[6px_6px_0px_0px_rgba(24,25,25,1)] w-full max-w-md"
+    >
+      <h2 class="text-3xl font-bold text-[#181919] mb-6 text-center">
+        Admin Access
+      </h2>
+
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-bold text-[#444748] mb-1"
+            >Username</label
+          >
+          <input
+            type="text"
+            id="username"
+            class="w-full p-3 border-2 border-[#181919] rounded-lg"
+            value="admin"
+            required
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-bold text-[#444748] mb-1"
+            >Password</label
+          >
+          <input
+            type="password"
+            id="password"
+            class="w-full p-3 border-2 border-[#181919] rounded-lg"
+            value="supersecret"
+            required
+          />
+        </div>
+        <p id="errorMessage" class="text-red-600 text-sm hidden"></p>
+        <button
+          type="submit"
+          class="w-full bg-[#181919] text-white p-3 rounded-lg font-bold shadow-[3px_3px_0px_0px_#456273] active:translate-y-1 active:shadow-none transition-all"
+        >
+          Login
+        </button>
+      </form>
+    </div>
+
+    <script>
+      document
+        .getElementById("loginForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const user = document.getElementById("username").value;
+          const pass = document.getElementById("password").value;
+
+          try {
+            const apiHost = window.location.origin.includes(":5500")
+              ? "http://127.0.0.1:8000"
+              : window.location.origin;
+            const response = await fetch(`${apiHost}/login`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username: user, password: pass }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+              // SUCCESS! Save the key to browser memory
+              localStorage.setItem("access_token", data.access_token);
+              // Redirect to dashboard
+              window.location.href = "index.html";
+            } else {
+              document.getElementById("errorMessage").innerText = data.detail;
+              document
+                .getElementById("errorMessage")
+                .classList.remove("hidden");
+            }
+          } catch (error) {
+            // THIS WILL NOW SHOW THE EXACT BROWSER ERROR
+            alert("Connection Error: " + error.message);
+            console.error("Full Error Details:", error);
+          }
+        });
+    </script>
+  </body>
+</html>

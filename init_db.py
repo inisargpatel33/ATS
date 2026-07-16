@@ -1,8 +1,5 @@
-import os
 import psycopg2
-
-DATABASE_URL = "postgresql://postgres:Nsrg%4033patel@db.rxseblfkhgyzuimejnmu.supabase.co:5432/postgres"
-
+from settings import DATABASE_URL
 
 def initialize_database():
     print("Connecting to database...")
