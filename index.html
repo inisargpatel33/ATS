@@ -322,12 +322,16 @@
             </p>
           </div>
           <div
-            class="bg-white hand-drawn-border-sm p-4 flex flex-col justify-center border-t-4 border-t-error"
+            class="bg-white hand-drawn-border-sm p-4 flex flex-col justify-center border-t-4 border-t-error relative group cursor-help"
           >
             <p
-              class="font-label-sm text-on-surface-variant mb-1 uppercase tracking-wider text-xs font-bold"
+              class="font-label-sm text-on-surface-variant mb-1 uppercase tracking-wider text-xs font-bold flex items-center gap-1"
             >
               Pending Issues
+              <span
+                class="material-symbols-outlined text-[14px] text-outline opacity-50"
+                >info</span
+              >
             </p>
             <p
               id="statIssues"
@@ -335,6 +339,26 @@
             >
               --
             </p>
+
+            <!-- 🚀 NEW: The Hover Tooltip Box -->
+            <div
+              class="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-56 bg-primary text-white p-3 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none"
+            >
+              <div
+                class="absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary rotate-45 rounded-sm"
+              ></div>
+              <p
+                class="text-xs font-bold border-b border-white/20 pb-1.5 mb-2 relative z-10 uppercase tracking-widest text-outline-variant"
+              >
+                Issue Breakdown
+              </p>
+              <ul
+                id="issuesTooltipList"
+                class="text-[12px] space-y-2 relative z-10 font-label-md"
+              >
+                <li class="opacity-50 animate-pulse">Loading data...</li>
+              </ul>
+            </div>
           </div>
           <div
             class="bg-white hand-drawn-border-sm p-4 flex flex-col justify-center border-t-4 border-t-[#c8e7fb]"
@@ -481,21 +505,36 @@
                 </h3>
               </div>
 
-              <!-- NEW: Chart Filter Dropdown -->
-              <div class="relative w-full sm:w-48">
-                <select
-                  id="chartDeptFilter"
-                  class="w-full bg-white hand-drawn-border-sm p-2 text-label-md focus:outline-none appearance-none pr-8 cursor-pointer"
+              <!-- Filter Dropdown & Transfer Action Button -->
+              <div class="flex items-center gap-3 w-full sm:w-auto">
+                <div class="relative w-full sm:w-48">
+                  <select
+                    id="chartDeptFilter"
+                    class="w-full bg-white hand-drawn-border-sm p-2 text-label-md focus:outline-none appearance-none pr-8 cursor-pointer"
+                  >
+                    <option value="all">All Departments</option>
+                  </select>
+                  <span
+                    class="material-symbols-outlined absolute right-2 top-2 pointer-events-none text-on-surface-variant"
+                    >expand_more</span
+                  >
+                </div>
+
+                <!-- 🚀 NEW: Quick Transfer Button -->
+                <button
+                  onclick="window.location.href = 'faculty.html'"
+                  class="bg-primary text-white hand-drawn-border-sm px-3 py-2 rounded-lg hover:-translate-y-1 active:translate-y-0 transition-transform flex items-center justify-center gap-2 shadow-[2px_2px_0px_0px_#181919] active:shadow-none"
+                  title="Manage Faculty HR & Hours"
                 >
-                  <option value="all">All Departments</option>
-                </select>
-                <span
-                  class="material-symbols-outlined absolute right-2 top-2 pointer-events-none text-on-surface-variant"
-                  >expand_more</span
-                >
+                  <span class="material-symbols-outlined text-sm"
+                    >edit_square</span
+                  >
+                  <span class="text-xs font-bold font-label-md hidden sm:block"
+                    >Manage</span
+                  >
+                </button>
               </div>
             </div>
-
             <div
               class="bg-white hand-drawn-border-sm offset-shadow-sm p-4 md:p-6"
             >
@@ -541,12 +580,16 @@
 
       async function loadDepartmentsForChart() {
         try {
-          const res = await apiFetch(`${API_URL}/dashboard-stats/global`);
-          const data = await res.json();
+          // 🚀 FIX: Pointed this to the correct API endpoint!
+          const res = await apiFetch(`${API_URL}/get-departments/`);
+          const result = await res.json();
+
           const filter = document.getElementById("chartDeptFilter");
-          data.data.forEach((dept) => {
-            filter.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
-          });
+          if (result.data) {
+            result.data.forEach((dept) => {
+              filter.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+            });
+          }
         } catch (e) {
           console.error("Failed to load departments for chart");
         }
@@ -577,6 +620,27 @@
               data.stats.issues > 0
                 ? "font-display-lg text-2xl md:text-3xl text-error font-bold"
                 : "font-display-lg text-2xl md:text-3xl text-[#181919]";
+
+            // 🚀 NEW: Populate the Hover Tooltip with actual breakdown
+            const tooltipList = document.getElementById("issuesTooltipList");
+            if (data.stats.issues === 0) {
+              tooltipList.innerHTML = `<li class="text-[#d8e8c7] flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check_circle</span> Zero issues found!</li>`;
+            } else {
+              // Filter the health checklist to only show failures/warnings
+              const pendingProblems = data.health.checklist.filter(
+                (item) => item.status !== "pass",
+              );
+              tooltipList.innerHTML = pendingProblems
+                .map((item) => {
+                  let color =
+                    item.status === "fail"
+                      ? "text-[#ffdad6]"
+                      : "text-[#FFE194]";
+                  let icon = item.status === "fail" ? "cancel" : "warning";
+                  return `<li class="${color} flex items-start gap-1.5 leading-tight"><span class="material-symbols-outlined text-[14px] mt-0.5">${icon}</span> <span>${item.text}</span></li>`;
+                })
+                .join("");
+            }
 
             // 2. Health Score & Checklist
             const healthScore = data.health.score;
