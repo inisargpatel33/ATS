@@ -529,43 +529,108 @@
       });
 
       // --- 4. EXPERTISE MODAL LOGIC ---
+      //   window.openExpertiseModal = async (facultyId) => {
+      //     currentFacultyId = facultyId;
+      //     expertiseList.innerHTML = "Loading...";
+      //     expertiseModal.classList.remove("hidden");
+      //     setTimeout(() => {
+      //       expertiseModal.classList.remove("opacity-0");
+      //     }, 10);
+
+      //     // Fetch subjects ONLY for the current global department
+      //     const res = await apiFetch(
+      //       `${API_URL}/get-subjects/${CURRENT_DEPT_ID}`,
+      //     );
+      //     const data = await res.json();
+
+      //     const currentExpRes = await apiFetch(
+      //       `${API_URL}/get-expertise/${facultyId}`,
+      //     );
+      //     const currentExpData = await currentExpRes.json();
+      //     const expMap = {};
+      //     currentExpData.data.forEach((exp) => {
+      //       expMap[exp.id] = exp.competency_tier;
+      //     });
+
+      //     expertiseList.innerHTML = "";
+      //     data.data.forEach((sub) => {
+      //       const currentTier = expMap[sub.id] || "0";
+      //       expertiseList.innerHTML += `
+      //   <div class="flex items-center justify-between p-3 border-b border-surface-variant">
+      //     <span class="font-label-md">${sub.name} <span class="text-xs text-on-surface-variant">(${sub.subject_type})</span></span>
+      //     <select id="tier-${sub.id}" class="bg-surface border-2 border-primary rounded-lg p-2 font-label-sm">
+      //       <option value="0" ${currentTier == "0" ? "selected" : ""}>None</option>
+      //       <option value="1.0" ${currentTier == "1.0" ? "selected" : ""}>Primary (1.0)</option>
+      //       <option value="0.5" ${currentTier == "0.5" ? "selected" : ""}>Backup (0.5)</option>
+      //     </select>
+      //   </div>
+      // `;
+      //     });
+      //   };
+      // --- 4. EXPERTISE MODAL LOGIC (CROSS-DEPARTMENT CAPABLE) ---
       window.openExpertiseModal = async (facultyId) => {
         currentFacultyId = facultyId;
-        expertiseList.innerHTML = "Loading...";
+        expertiseList.innerHTML = `<div class="p-4 text-center font-bold text-primary animate-pulse">Loading university-wide subjects...</div>`;
         expertiseModal.classList.remove("hidden");
         setTimeout(() => {
           expertiseModal.classList.remove("opacity-0");
         }, 10);
 
-        // Fetch subjects ONLY for the current global department
-        const res = await apiFetch(
-          `${API_URL}/get-subjects/${CURRENT_DEPT_ID}`,
-        );
-        const data = await res.json();
+        try {
+          // 1. Fetch the faculty's currently saved expertise mappings
+          const currentExpRes = await apiFetch(
+            `${API_URL}/get-expertise/${facultyId}`,
+          );
+          const currentExpData = await currentExpRes.json();
+          const expMap = {};
+          if (currentExpData.data) {
+            currentExpData.data.forEach((exp) => {
+              expMap[exp.id] = exp.competency_tier;
+            });
+          }
 
-        const currentExpRes = await apiFetch(
-          `${API_URL}/get-expertise/${facultyId}`,
-        );
-        const currentExpData = await currentExpRes.json();
-        const expMap = {};
-        currentExpData.data.forEach((exp) => {
-          expMap[exp.id] = exp.competency_tier;
-        });
+          // 2. Fetch ALL departments across the university
+          const deptRes = await apiFetch(`${API_URL}/get-departments/`);
+          const deptData = await deptRes.json();
 
-        expertiseList.innerHTML = "";
-        data.data.forEach((sub) => {
-          const currentTier = expMap[sub.id] || "0";
-          expertiseList.innerHTML += `
-      <div class="flex items-center justify-between p-3 border-b border-surface-variant">
-        <span class="font-label-md">${sub.name} <span class="text-xs text-on-surface-variant">(${sub.subject_type})</span></span>
-        <select id="tier-${sub.id}" class="bg-surface border-2 border-primary rounded-lg p-2 font-label-sm">
-          <option value="0" ${currentTier == "0" ? "selected" : ""}>None</option>
-          <option value="1.0" ${currentTier == "1.0" ? "selected" : ""}>Primary (1.0)</option>
-          <option value="0.5" ${currentTier == "0.5" ? "selected" : ""}>Backup (0.5)</option>
-        </select>
-      </div>
-    `;
-        });
+          expertiseList.innerHTML = "";
+
+          // 3. Loop through every department and load its specific subjects
+          for (const dept of deptData.data) {
+            const subRes = await apiFetch(`${API_URL}/get-subjects/${dept.id}`);
+            const subData = await subRes.json();
+
+            if (subData.data && subData.data.length > 0) {
+              // Create a distinct visual header for each department
+              expertiseList.innerHTML += `
+                    <div class="bg-surface-container-low p-2 mt-4 mb-2 font-bold text-primary rounded border border-surface-variant sticky top-0 z-10">
+                      ${dept.name} Subjects
+                    </div>
+                  `;
+
+              // List all subjects under that department
+              subData.data.forEach((sub) => {
+                const currentTier = expMap[sub.id] || "0";
+                expertiseList.innerHTML += `
+                <div class="flex items-center justify-between p-3 border-b border-surface-variant ml-2 hover:bg-surface-container-lowest transition-colors">
+                  <span class="font-label-md text-primary">${sub.name} <span class="text-xs text-on-surface-variant">(${sub.subject_type})</span></span>
+                  <select id="tier-${sub.id}" class="bg-surface border-2 border-primary rounded-lg p-1.5 font-label-sm focus:ring-secondary-container outline-none cursor-pointer">
+                    <option value="0" ${currentTier == "0" ? "selected" : ""}>None</option>
+                    <option value="1.0" ${currentTier == "1.0" ? "selected" : ""}>Primary (1.0)</option>
+                    <option value="0.5" ${currentTier == "0.5" ? "selected" : ""}>Backup (0.5)</option>
+                  </select>
+                </div>
+              `;
+              });
+            }
+          }
+
+          if (expertiseList.innerHTML === "") {
+            expertiseList.innerHTML = `<div class="p-4 text-center italic text-on-surface-variant">No subjects found in the system.</div>`;
+          }
+        } catch (error) {
+          expertiseList.innerHTML = `<div class="p-4 text-center text-error font-bold">Failed to load subjects.</div>`;
+        }
       };
 
       async function saveExpertise() {

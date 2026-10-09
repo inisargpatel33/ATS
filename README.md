@@ -1,125 +1,41 @@
 ﻿# 🎓 SmartSched Uni - AI-Powered Academic Timetable Engine
 
-**SmartSched Uni** is a full-stack SaaS platform designed to solve one of the most complex mathematical challenges in academia: **The University Timetabling Problem (an NP-Hard Constraint Satisfaction Problem).**
+**SmartSched Uni** is a full-stack SaaS platform designed to solve the University Timetabling Problem (an NP-Hard Constraint Satisfaction Problem) using an asynchronous AI scheduling engine to generate clash-free schedules while optimizing resources.
 
-Instead of relying on manual spreadsheets, this platform uses an asynchronous AI scheduling engine to automatically generate 100% clash-free schedules while optimizing for faculty workload constraints, room capacities, and back-to-back lecture rules.
+---
 
-## 🌟 Why is this helpful? (The Problem it Solves)
+## 🌟 Why is this helpful?
 
-Manually scheduling hundreds of classes across dozens of rooms and professors results in human error, double-bookings, and severely overworked faculty.
-
-**SmartSched Uni** acts as an "Intelligent Command Center" for University Admins:
-
-1. **Saves Hundreds of Hours:** What takes a human week to calculate, the AI solves in under 2 minutes.
-2. **Predictive Resource Management:** The dashboard predicts next semester's room shortages and faculty hiring needs _before_ they happen.
-3. **Student Experience:** Automatically syncs generated timetables directly to student Apple/Google Calendars and [provides a live WhatsApp Bot for schedule queries(This functionality we will add later)].
+Manually scheduling classes leads to human error and overworked faculty. SmartSched Uni acts as an intelligent command center that saves hundreds of hours, provides predictive resource management, and syncs timetables to calendar applications.
 
 ---
 
 ## 🚀 Key Features
 
-- 🧠 **Asynchronous "Mega-Job" AI Engine:** Runs multiple mathematical scenarios in parallel (Strict Compliance, Expanded Windows, and Forced 100% Completion) as background tasks to prevent server blocking.
-- 🛡️ **Self-Aware Pre-Flight Validation:** Scans the HR and Room database _before_ running heavy math, alerting admins if a schedule is physically impossible due to missing data.
-- 🖱️ **Drag & Drop Interactive Grid:** Admins can manually tweak the AI's draft. The grid features real-time conflict validation (prevents dropping a class onto a busy professor).
-- 💡 **Smart Slot Recommendations:** If a class couldn't be scheduled, the AI scans the entire university matrix and suggests the exact time, room, and professor to resolve the bottleneck.
-- 📊 **Predictive Analytics Dashboard:** Features live Chart.js workload distributions, a dynamic "Health Score," and predictive hiring/room capacity warnings.
-- 📅 **Native Calendar Sync (ICS):** Instantly generates `.ics` files for entire batches to push schedules to native mobile calendar apps.
-- 💬 **WhatsApp Webhook Integration:** Built-in Twilio/Meta webhook allowing students to text "Next" or "Today" to receive their live schedule.
+- 🧠 **Asynchronous AI Engine:** Runs multiple scenarios in parallel as background tasks.
+- 🛡️ **Pre-Flight Validation:** Alerts admins if a schedule is physically impossible before running computations.
+- 🖱️ **Interactive Grid:** Drag-and-drop interface with real-time conflict validation.
+- 💡 **Smart Slot Recommendations:** Suggests times, rooms, and professors to resolve bottlenecks.
+- 📊 **Predictive Analytics:** Features workload distributions, health scores, and capacity warnings.
+- 📅 **Calendar Sync:** Generates `.ics` files and integrates with messaging webhooks.
 
 ---
 
 ## 💻 Tech Stack
 
-**Backend:**
-
-- **Python 3.9+** (Core logic)
-- **FastAPI** (High-performance, async API framework)
-- **Google OR-Tools (CP-SAT Solver)** (The AI mathematical engine used for Constraint Programming)
-- **Psycopg2** (Thread-safe PostgreSQL connection pooling)
-- **Bcrypt** (Secure Admin authentication)
-
-**Frontend:**
-
-- **HTML5 & Vanilla JavaScript** (Zero-bloat, lightning-fast DOM manipulation)
-- **Tailwind CSS** (Modern, responsive, custom UI design)
-- **Chart.js** (Dynamic dashboard analytics)
-
-**Database:**
-
-- **PostgreSQL** (Relational database for storing structural mapping, HR rules, and saved matrices)
+- **Backend:** Python 3.9+, FastAPI, Google OR-Tools (CP-SAT Solver), Psycopg2, Bcrypt.
+- **Frontend:** HTML5, Vanilla JavaScript, Tailwind CSS, Chart.js.
+- **Database:** PostgreSQL.
 
 ---
 
-## ⚙️ How the AI Engine Works (Architecture)
+## ⚙️ Architecture & Setup
 
-This project uses **Constraint Programming (CP)**. The algorithm transforms the university schedule into a massive boolean matrix where:
+The system uses Constraint Programming to model scheduling constraints (no double-bookings, workload limits, room capacities, and block lectures).
 
-- `X[faculty, subject, room, day, timeslot, batch] = 1 (Scheduled) or 0 (Empty)`
+To run locally:
 
-The engine enforces strict constraints:
-
-1. **No Double Bookings:** `Sum(slots_per_faculty) <= 1` at any given time.
-2. **Workload Limits:** `Sum(faculty_weekly_hours) <= Max_Contract_Hours`.
-3. **Room Capacity:** Only valid, sufficiently large rooms are evaluated.
-4. **Block Lectures:** Practical labs are forced into consecutive 2-hour blocks.
-
----
-
-## 🛠️ Installation & Setup (How to run it locally)
-
-### Prerequisites
-
-- Python 3.9 or higher
-- PostgreSQL installed and running
-
-### 1. Clone the repository
-
-git clone [(https://github.com/inisargpatel33/ATS.git)](https://github.com/inisargpatel33/ATS.git)
-cd smartsched-uni
-
-### 2. Set up the Virtual Environment & Dependencies
-
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows use: venv\Scripts\activate
-pip install -r requirements.txt
-
-```
-
-### 3. Database Configuration
-
-1. Open pgAdmin or your PostgreSQL CLI.
-2. Create a new database named `smartsched`.
-3. Open `settings.py` (or your `.env` file) and update the `DATABASE_URL` string:
-
-```python
-DATABASE_URL = "postgresql://postgres:yourpassword@localhost:5432/smartsched"
-
-```
-
-### 4. Run the Application
-
-The backend and frontend are tightly coupled via FastAPI's static file serving. You only need to run the Python server!
-
-```bash
-uvicorn main:app --reload --port 8000
-
-```
-
-### 5. Access the Portal
-
-Open your web browser and navigate to:
-👉 `http://127.0.0.1:8000/`
-
-_(Log in using the default Admin credentials configured in your `settings.py`)_
-
----
-
-## 📖 Quick Start Guide (User Flow)
-
-1. **Map the Data:** Navigate to the side menu and populate Departments, Rooms (with capacities), Batches, Subjects, and Faculty (including their max weekly hours and subject expertise).
-2. **Run the Scheduler:** Go to the `Scheduler` tab, select your constraints, and click Generate.
-3. **Review the Analysis:** The AI will output an Analysis Report detailing its success rate. Use the **Smart Recommendations** to fix any unscheduled classes, or use the **Optimization Strategy** toggles to instantly switch to a relaxed-rule draft.
-4. **Publish & Sync:** Save the timetable to the database, then click "Sync to App" to export the `.ics` calendar.
-5. **Monitor Health:** Check the `Dashboard` to review predictive analytics and faculty workload distribution across the campus.
-
+1. Clone the repository and set up a virtual environment.
+2. Install dependencies via `pip install -r requirements.txt`.
+3. Configure your PostgreSQL database named `smartsched` and update the connection string.
+4. Run the server using `uvicorn main:app --reload --port 8000` and access `http://127.0.0.1:8000/`.
