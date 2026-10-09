@@ -6,6 +6,8 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 SECRET_KEY = "smart_timetable_scedular_seccret_chavi"  # In a real-world scenario, this should be a secure, random key and not hardcoded. and make sure to keep it secret and not expose it in your codebase. Consider using environment variables or a secrets manager for production environments.
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
 
 # Explicit CORS origin configuration for secure deployment
 default_allowed_origins = "http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:5500,http://localhost:5500"

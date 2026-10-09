@@ -15,6 +15,13 @@ from auth import create_access_token
 import bcrypt
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from fastapi import BackgroundTasks, Header
+from datetime import datetime, timezone
+from hmac import compare_digest
+from urllib import request as urllib_request
+from urllib.error import HTTPError, URLError
+import json
+import re
 
 # ⚠️ FAKE DATABASE FOR ADMIN PASSWORD 
 # Generate the bcrypt hash directly using the modern bcrypt library
@@ -22,7 +29,13 @@ HASHED_ADMIN_PASSWORD = bcrypt.hashpw(b"supersecret", bcrypt.gensalt())
 
 
 # IMPORT YOUR NEW CONFIG
-from settings import DATABASE_URL, SECRET_KEY, ALLOWED_ORIGINS
+from settings import (
+    DATABASE_URL,
+    SECRET_KEY,
+    ALLOWED_ORIGINS,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_WEBHOOK_SECRET,
+)
 
 
 
@@ -31,6 +44,31 @@ from settings import DATABASE_URL, SECRET_KEY, ALLOWED_ORIGINS
 # =========================================================
 
 app = FastAPI(title="Timetable SaaS API")
+
+from pyngrok import ngrok
+
+@app.on_event("startup")
+def auto_configure_ngrok_and_telegram():
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_WEBHOOK_SECRET:
+        print("⚠️ Skipping Telegram Webhook setup: Missing tokens in .env")
+        return
+
+    try:
+        # 1. Automatically start the Ngrok tunnel on port 8000
+        tunnel = ngrok.connect(8000)
+        public_url = tunnel.public_url
+        print(f"\n✅ Ngrok tunnel successfully started at: {public_url}")
+
+        # 2. Automatically register this new URL with Telegram
+        webhook_url = f"{public_url}/telegram/webhook"
+        _telegram_api(
+            "setWebhook",
+            {"url": webhook_url, "secret_token": TELEGRAM_WEBHOOK_SECRET},
+        )
+        print(f"✅ Telegram Webhook automatically locked to: {webhook_url}\n")
+        
+    except Exception as e:
+        print(f"\n❌ Failed to auto-configure Ngrok/Telegram: {e}\n")
 
 app.add_middleware(
     CORSMiddleware,
@@ -53,6 +91,107 @@ app.add_middleware(
     ],
 )
 
+# =========================================================
+# Pydantic Models for Request Validation
+# =========================================================
+
+class LeaveCreate(BaseModel):
+    faculty_id: int
+    leave_date: str # Format: YYYY-MM-DD
+    reason: Optional[str] = ""
+
+class SubCreate(BaseModel):
+    timetable_id: int
+    substitute_faculty_id: int
+    specific_date: str # Format: YYYY-MM-DD
+    
+
+
+# =========================================================
+# PUBLIC PORTAL ENDPOINTS (Phase 1 & 2)
+# =========================================================
+@app.get("/public/get-batches/")
+def public_get_batches():
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, name FROM batches ORDER BY name ASC")
+        return {"success": True, "data": cursor.fetchall()}
+    finally: cursor.close(); release_db_connection(conn)
+
+@app.get("/public/get-faculties/")
+def public_get_faculties():
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, name FROM faculties ORDER BY name ASC")
+        return {"success": True, "data": cursor.fetchall()}
+    finally: cursor.close(); release_db_connection(conn)
+
+@app.get("/public/view-timetable/{batch_id}")
+def public_view_timetable(batch_id: int):
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT t.day_of_week, t.timeslot, s.name AS subject, r.name AS room, f.name AS faculty, t.id AS timetable_id
+            FROM timetables t
+            JOIN subjects s ON t.subject_id = s.id
+            JOIN rooms r ON t.room_id = r.id
+            JOIN faculties f ON t.faculty_id = f.id
+            WHERE t.batch_id = %s
+        """, (batch_id,))
+        records = cursor.fetchall()
+        
+        # Pull active substitutes
+        cursor.execute("""
+            SELECT ds.timetable_id, ds.specific_date, f.name as sub_name
+            FROM daily_substitutes ds
+            JOIN faculties f ON ds.substitute_faculty_id = f.id
+            WHERE ds.specific_date >= CURRENT_DATE
+        """)
+        subs = cursor.fetchall()
+        sub_map = {f"{s['timetable_id']}_{s['specific_date']}": s['sub_name'] for s in subs}
+        
+        return {"success": True, "data": records, "substitutes": sub_map}
+    finally: cursor.close(); release_db_connection(conn)
+
+@app.post("/faculty-leave/")
+def add_faculty_leave(payload: LeaveCreate, background_tasks: BackgroundTasks):
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO faculty_leave (faculty_id, leave_date, reason) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING", (payload.faculty_id, payload.leave_date, payload.reason))
+        
+        # Find affected batches to trigger Telegram Sniper Alerts
+        cursor.execute("SELECT DISTINCT batch_id, subject_id, room_id, timeslot, day_of_week FROM timetables WHERE faculty_id = %s", (payload.faculty_id,))
+        affected = cursor.fetchall()
+        conn.commit()
+
+        if TELEGRAM_BOT_TOKEN:
+            leave_dt = datetime.strptime(payload.leave_date, "%Y-%m-%d")
+            leave_day_str = leave_dt.strftime("%a")
+            for record in affected:
+                if record['day_of_week'] == leave_day_str:
+                    cursor.execute("SELECT name FROM subjects WHERE id = %s", (record['subject_id'],))
+                    subj_name = cursor.fetchone()['name']
+                    msg = f"⚠️ Alert: Your {subj_name} class on {payload.leave_date} at {record['timeslot']} currently has no professor. Stand by for substitute assignment."
+                    background_tasks.add_task(_notify_batch_subscribers, record['batch_id'], msg)
+        
+        return {"success": True, "message": "Leave marked and students alerted via Telegram."}
+    finally: cursor.close(); release_db_connection(conn)
+
+@app.post("/assign-substitute/")
+def assign_substitute(payload: SubCreate, background_tasks: BackgroundTasks, user: dict = Depends(require_admin)):
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO daily_substitutes (timetable_id, substitute_faculty_id, specific_date) VALUES (%s, %s, %s) ON CONFLICT (timetable_id, specific_date) DO UPDATE SET substitute_faculty_id = EXCLUDED.substitute_faculty_id", (payload.timetable_id, payload.substitute_faculty_id, payload.specific_date))
+        cursor.execute("SELECT t.batch_id, t.timeslot, s.name as subject_name, f.name as new_fac FROM timetables t JOIN subjects s ON t.subject_id = s.id JOIN faculties f ON f.id = %s WHERE t.id = %s", (payload.substitute_faculty_id, payload.timetable_id))
+        info = cursor.fetchone()
+        conn.commit()
+
+        if TELEGRAM_BOT_TOKEN and info:
+            msg = f"✅ Update: Your {info['subject_name']} class at {info['timeslot']} on {payload.specific_date} will be covered by {info['new_fac']}."
+            background_tasks.add_task(_notify_batch_subscribers, info['batch_id'], msg)
+
+        return {"success": True, "message": "Substitute assigned and Telegram alert sent."}
+    finally: cursor.close(); release_db_connection(conn)
 
 # =========================================================
 # THE ULTIMATE CORS BYPASS (Serve HTML directly from Python)
@@ -124,7 +263,331 @@ class SaveTimetableRequest(BaseModel): records: List[TimetableRecord]; notes: st
 class LoginRequest(BaseModel):
     username: str
     password: str
+class TelegramWebhookRequest(BaseModel):
+    update_id: Optional[int] = None
+    message: Optional[dict] = None
+class TelegramWebhookConfig(BaseModel):
+    public_url: str
 
+# =========================================================
+# TELEGRAM LIVE COMMUNICATION
+# =========================================================
+TELEGRAM_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+TELEGRAM_DAY_NAMES = {
+    "Mon": "Monday",
+    "Tue": "Tuesday",
+    "Wed": "Wednesday",
+    "Thu": "Thursday",
+    "Fri": "Friday",
+}
+
+
+def _telegram_api(method: str, payload: dict) -> dict:
+    if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured")
+
+    body = json.dumps(payload).encode("utf-8")
+    api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}"
+    http_request = urllib_request.Request(
+        api_url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib_request.urlopen(http_request, timeout=10) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Telegram API request failed: {exc}") from exc
+
+    if not result.get("ok"):
+        raise RuntimeError(f"Telegram API rejected {method}: {result}")
+    return result
+
+
+# def _send_telegram_message(chat_id: int, text: str) -> bool:
+#     try:
+#         _telegram_api("sendMessage", {"chat_id": chat_id, "text": text})
+#         return True
+#     except RuntimeError as exc:
+#         print(f"TELEGRAM DELIVERY ERROR chat_id={chat_id}: {exc}")
+#         return False
+def _send_telegram_message(chat_id: int, text: str, reply_markup: dict = None) -> bool:
+    payload = {"chat_id": chat_id, "text": text}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+        
+    try:
+        _telegram_api("sendMessage", payload)
+        return True
+    except RuntimeError as exc:
+        print(f"TELEGRAM DELIVERY ERROR chat_id={chat_id}: {exc}")
+        return False
+
+
+def _notify_batch_subscribers(batch_id: int, message: str) -> int:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT chat_id FROM telegram_subscriptions
+            WHERE role = 'Student' AND target_id = %s
+            """,
+            (batch_id,),
+        )
+        chat_ids = [row["chat_id"] for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+    delivered = sum(_send_telegram_message(chat_id, message) for chat_id in chat_ids)
+    print(f"TELEGRAM BATCH NOTIFICATION batch_id={batch_id} delivered={delivered}/{len(chat_ids)}")
+    return delivered
+
+
+def _notify_published_batches(batch_ids: list[int]) -> None:
+    if not TELEGRAM_BOT_TOKEN:
+        print("TELEGRAM NOTIFICATION SKIPPED: TELEGRAM_BOT_TOKEN is not configured")
+        return
+    for batch_id in sorted(set(batch_ids)):
+        _notify_batch_subscribers(
+            batch_id,
+            "🚨 The official timetable has been published. "
+            "Send /next to see your next lecture.",
+        )
+
+
+def _notify_reschedule(batch_id: int, subject: str, old_day: str, old_slot: str,
+                       new_day: str, new_slot: str, room: str) -> None:
+    if not TELEGRAM_BOT_TOKEN:
+        print("TELEGRAM NOTIFICATION SKIPPED: TELEGRAM_BOT_TOKEN is not configured")
+        return
+    message = (
+        "⚠️ Urgent timetable update\n"
+        f"{subject} has moved from {TELEGRAM_DAY_NAMES.get(old_day, old_day)} "
+        f"{old_slot} to {TELEGRAM_DAY_NAMES.get(new_day, new_day)} {new_slot}.\n"
+        f"Room: {room}"
+    )
+    _notify_batch_subscribers(batch_id, message)
+
+
+def _parse_slot_start(slot: str) -> Optional[datetime]:
+    match = re.match(r"^\s*(\d{1,2}):(\d{2})\s*(AM|PM)", slot or "", re.IGNORECASE)
+    if not match:
+        return None
+    return datetime.strptime(
+        f"{match.group(1)}:{match.group(2)} {match.group(3).upper()}",
+        "%I:%M %p",
+    )
+
+
+def _next_lecture(chat_id: int) -> str:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT b.name AS batch, s.name AS subject, t.day_of_week,
+                   t.timeslot, r.name AS room
+            FROM telegram_subscriptions ts
+            JOIN batches b ON b.id = ts.target_id
+            JOIN timetables t ON t.batch_id = b.id
+            JOIN subjects s ON s.id = t.subject_id
+            JOIN rooms r ON r.id = t.room_id
+            WHERE ts.chat_id = %s AND ts.role = 'Student'
+            """,
+            (chat_id,),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+    if not rows:
+        return "No published timetable was found for your batch yet."
+
+    now = datetime.now().astimezone()
+    current_day = now.weekday()
+    candidates = []
+    for row in rows:
+        if row["day_of_week"] not in TELEGRAM_DAYS:
+            continue
+        slot_start = _parse_slot_start(row["timeslot"])
+        if slot_start is None:
+            continue
+        day_index = TELEGRAM_DAYS.index(row["day_of_week"])
+        distance = (day_index - current_day) % 7
+        if distance == 0:
+            if slot_start.time() <= now.time():
+                continue
+        candidates.append((distance, slot_start.time(), row))
+
+    if not candidates:
+        return "There are no remaining lectures in this week's published timetable."
+
+    _, _, lecture = min(candidates, key=lambda item: (item[0], item[1]))
+    return (
+        f"Your next lecture ({lecture['batch']}) is {lecture['subject']} "
+        f"on {TELEGRAM_DAY_NAMES.get(lecture['day_of_week'], lecture['day_of_week'])} "
+        f"at {lecture['timeslot']} in {lecture['room']}."
+    )
+
+
+def _process_telegram_update(update: dict) -> None:
+    message = update.get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    text = (message.get("text") or "").strip()
+    if chat_id is None or not text:
+        return
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        text_lower = text.lower()
+        
+        # --- 1. /faculty COMMAND ---
+        faculty_match = re.match(r"^/?faculty\s+(\d+)$", text, re.IGNORECASE)
+        if faculty_match:
+            faculty_id = int(faculty_match.group(1))
+            cursor.execute("SELECT id, name FROM faculties WHERE id = %s", (faculty_id,))
+            faculty = cursor.fetchone()
+            if not faculty:
+                _send_telegram_message(chat_id, "That faculty ID was not found.")
+                return
+            cursor.execute(
+                """
+                INSERT INTO telegram_subscriptions (chat_id, role, target_id)
+                VALUES (%s, 'Faculty', %s)
+                ON CONFLICT (chat_id) DO UPDATE SET role = 'Faculty',
+                    target_id = EXCLUDED.target_id, updated_at = NOW()
+                """,
+                (chat_id, faculty_id),
+            )
+            conn.commit()
+            _send_telegram_message(chat_id, f"✅ This chat is linked to {faculty['name']}.")
+            return
+
+        # --- 2. /next COMMAND ---
+        if text_lower in {"/next", "next", "my schedule", "where is my next lecture?"}:
+            _send_telegram_message(chat_id, _next_lecture(chat_id))
+            return
+
+        # --- 3. BATCH LOOKUP ---
+        if not text_lower.startswith("/start") and text_lower != "start":
+            cursor.execute(
+                "SELECT id, name FROM batches WHERE LOWER(name) = LOWER(%s) ORDER BY id DESC LIMIT 1",
+                (text.removeprefix("/batch ").strip(),),
+            )
+            batch = cursor.fetchone()
+            if batch:
+                cursor.execute(
+                    """
+                    INSERT INTO telegram_subscriptions (chat_id, role, target_id)
+                    VALUES (%s, 'Student', %s)
+                    ON CONFLICT (chat_id) DO UPDATE SET role = 'Student',
+                        target_id = EXCLUDED.target_id, updated_at = NOW()
+                    """,
+                    (chat_id, batch["id"]),
+                )
+                cursor.execute("DELETE FROM telegram_handshakes WHERE chat_id = %s", (chat_id,))
+                conn.commit()
+                
+                # Send success message and instantly remove the keyboard menu
+                _send_telegram_message(
+                    chat_id,
+                    f"✅ Linked successfully to {batch['name']}.\n\nSend /next to get your next lecture.",
+                    reply_markup={"remove_keyboard": True}
+                )
+                return
+
+        # --- 4. THE FAILSAFE MENU ---
+        if text_lower.startswith("/start") or text_lower == "start":
+            cursor.execute("INSERT INTO telegram_handshakes (chat_id) VALUES (%s) ON CONFLICT DO NOTHING", (chat_id,))
+            msg_prefix = "Welcome to SmartSched Uni! 🎓\n\n"
+        else:
+            msg_prefix = "❌ I didn't recognize that command or batch name.\n\n"
+
+        # Pull all batches dynamically
+        cursor.execute("SELECT name FROM batches ORDER BY name ASC")
+        batches = cursor.fetchall()
+        conn.commit()
+
+        if not batches:
+            _send_telegram_message(chat_id, msg_prefix + "No batches are currently configured in the system. Please ask your administrator to add them.")
+            return
+
+        # Generate the popup buttons!
+        keyboard = [[{"text": b["name"]}] for b in batches]
+        reply_markup = {
+            "keyboard": keyboard,
+            "resize_keyboard": True,
+            "one_time_keyboard": True,
+            "input_field_placeholder": "Tap your batch..."
+        }
+
+        _send_telegram_message(
+            chat_id,
+            msg_prefix + "Please tap your specific batch from the menu below to link your account:",
+            reply_markup=reply_markup
+        )
+        return
+
+    except Exception as exc:
+        conn.rollback()
+        print(f"TELEGRAM UPDATE ERROR chat_id={chat_id}: {exc}")
+        _send_telegram_message(chat_id, "I could not process that request. Please try again.")
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+@app.post("/telegram/webhook")
+def telegram_webhook(
+    payload: TelegramWebhookRequest,
+    background_tasks: BackgroundTasks,
+    secret_token: Optional[str] = Header(default=None, alias="X-Telegram-Bot-Api-Secret-Token"),
+):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Telegram integration is not configured")
+    if not secret_token or not compare_digest(secret_token, TELEGRAM_WEBHOOK_SECRET):
+        raise HTTPException(status_code=403, detail="Invalid Telegram webhook secret")
+    background_tasks.add_task(_process_telegram_update, payload.model_dump())
+    return {"ok": True}
+
+@app.get("/telegram/subscriptions")
+def telegram_subscription_summary(user: dict = Depends(require_admin)):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT role, target_id, COUNT(*) AS subscriber_count
+            FROM telegram_subscriptions
+            GROUP BY role, target_id
+            ORDER BY role, target_id
+            """
+        )
+        return {"success": True, "data": cursor.fetchall()}
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+@app.post("/telegram/configure-webhook")
+def configure_telegram_webhook(
+    config: TelegramWebhookConfig,
+    user: dict = Depends(require_admin),
+):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Telegram integration is not configured")
+    public_url = config.public_url.rstrip("/") + "/telegram/webhook"
+    if not public_url.lower().startswith("https://"):
+        raise HTTPException(status_code=400, detail="Telegram webhooks require an HTTPS public URL")
+    _telegram_api(
+        "setWebhook",
+        {"url": public_url, "secret_token": TELEGRAM_WEBHOOK_SECRET},
+    )
+    return {"success": True, "message": "Telegram webhook configured", "url": public_url}        
 # =========================================================
 # CRUD ENDPOINTS (Departments, Faculties, Rooms, Batches, Subjects, Expertise)
 # =========================================================
@@ -824,7 +1287,11 @@ def generate_timetable(department_id: int, payload: GenerateRequest, user: dict 
         release_db_connection(conn)
 
 @app.post("/save-timetable/")
-def save_timetable(payload: SaveTimetableRequest, user: dict = Depends(require_admin)):
+def save_timetable(
+    payload: SaveTimetableRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(require_admin),
+):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -849,6 +1316,7 @@ def save_timetable(payload: SaveTimetableRequest, user: dict = Depends(require_a
         """, insert_data)
         
         conn.commit()
+        background_tasks.add_task(_notify_published_batches, batch_ids)
         return {"success": True, "message": "Timetable securely published to database."}
         
     except Exception as e: 
@@ -871,11 +1339,40 @@ def validate_timetable_swap(payload: SwapValidationRequest, user: dict = Depends
     finally: cursor.close(); release_db_connection(conn)
 
 @app.put("/update-timetable-slot/")
-def update_timetable_slot(payload: UpdateSlotRequest, user: dict = Depends(require_admin)):
+def update_timetable_slot(
+    payload: UpdateSlotRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(require_admin),
+):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
+        cursor.execute(
+            """
+            SELECT t.batch_id, t.subject_id, t.day_of_week, t.timeslot,
+                   s.name AS subject, r.name AS room
+            FROM timetables t
+            JOIN subjects s ON s.id = t.subject_id
+            JOIN rooms r ON r.id = t.room_id
+            WHERE t.id = %s
+            """,
+            (payload.record_id,),
+        )
+        previous = cursor.fetchone()
+        if not previous:
+            raise HTTPException(status_code=404, detail="Timetable record not found")
         cursor.execute("UPDATE timetables SET day_of_week = %s, timeslot = %s WHERE id = %s", (payload.new_day, payload.new_timeslot, payload.record_id))
-        conn.commit(); return {"success": True, "message": "Timetable updated permanently!"}
+        conn.commit()
+        background_tasks.add_task(
+            _notify_reschedule,
+            previous["batch_id"],
+            previous["subject"],
+            previous["day_of_week"],
+            previous["timeslot"],
+            payload.new_day,
+            payload.new_timeslot,
+            previous["room"],
+        )
+        return {"success": True, "message": "Timetable updated permanently!"}
     except Exception as e:
         conn.rollback()
         if "unique constraint" in str(e).lower(): return {"success": False, "message": "Database Conflict: Room or Faculty is occupied."}

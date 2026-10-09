@@ -39,3 +39,33 @@ To run locally:
 2. Install dependencies via `pip install -r requirements.txt`.
 3. Configure your PostgreSQL database named `smartsched` and update the connection string.
 4. Run the server using `uvicorn main:app --reload --port 8000` and access `http://127.0.0.1:8000/`.
+
+## Telegram live communication
+
+The Telegram integration is opt-in and routes every message by the subscription's
+`role` and `target_id`; a student subscribed to one batch cannot receive another
+batch's targeted alerts.
+
+1. Create a bot with BotFather and set these environment variables (never commit
+   the token):
+
+   ```env
+   TELEGRAM_BOT_TOKEN=your_bot_token
+   TELEGRAM_WEBHOOK_SECRET=a-long-random-secret
+   ```
+
+2. Run the schema initialization so it creates `telegram_subscriptions` and
+   `telegram_handshakes`.
+3. From an authenticated admin session, configure the webhook:
+   `POST /telegram/configure-webhook` with
+   `{"public_url":"https://your-public-api.example.com"}`.
+4. A student sends `/start`, then replies with the exact batch name (for example
+   `BCA-Sem3`). The backend stores the Telegram `chat_id` against that batch.
+   Faculty can link with `/faculty <faculty_id>`.
+5. Students can send `/next` (or “Where is my next lecture?”). Publishing a
+   timetable notifies only its affected batches, and moving a timetable slot
+   notifies only that slot's batch.
+
+Telegram must be able to reach the deployed HTTPS endpoint. For local testing,
+use an HTTPS tunnel such as ngrok or Cloudflare Tunnel. The webhook returns
+quickly and processes the update in a FastAPI background task.

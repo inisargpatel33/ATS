@@ -23,6 +23,14 @@ CREATE TABLE IF NOT EXISTS faculties (
     max_weekly_hours INTEGER NOT NULL DEFAULT 15 CHECK (max_weekly_hours > 0 AND max_weekly_hours <= 40)
 );
 
+-- Academic terms must exist before batches reference them.
+CREATE TABLE IF NOT EXISTS semesters (
+    id SERIAL PRIMARY KEY,
+    department_id INTEGER REFERENCES departments(id) ON DELETE CASCADE,
+    name VARCHAR(50) NOT NULL,
+    term_number INTEGER NOT NULL
+);
+
 -- 4. Batches (Depends on departments & faculties)
 CREATE TABLE IF NOT EXISTS batches (
     -- id SERIAL PRIMARY KEY,
@@ -90,17 +98,29 @@ ADD COLUMN shift VARCHAR(20) NOT NULL DEFAULT 'Morning'
 CHECK (shift IN ('Morning', 'Afternoon'));
 
 
--- chatgpt generated this code, do not edit
-CREATE TABLE semesters (
-    id SERIAL PRIMARY KEY,
-    department_id INTEGER REFERENCES departments(id) ON DELETE CASCADE,
-    name VARCHAR(50) NOT NULL,
-    term_number INTEGER NOT NULL
-);
-
 -- Junction table to link batches and subjects for each semester
 CREATE TABLE semester_subjects (
     semester_id INTEGER REFERENCES semesters(id) ON DELETE CASCADE,
     subject_id INTEGER REFERENCES subjects(id) ON DELETE CASCADE,
     PRIMARY KEY (semester_id, subject_id)
 );
+
+-- Telegram subscriptions are deliberately scoped to one batch or faculty.
+-- A chat_id is unique so a Telegram chat can only receive one target's alerts.
+CREATE TABLE IF NOT EXISTS telegram_subscriptions (
+    chat_id BIGINT PRIMARY KEY,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('Student', 'Faculty')),
+    target_id INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_subscriptions_target
+    ON telegram_subscriptions (role, target_id);
+
+CREATE TABLE IF NOT EXISTS telegram_handshakes (
+    chat_id BIGINT PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
