@@ -254,6 +254,21 @@
                   class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container"
                 />
               </div>
+              <div class="flex flex-col space-y-2">
+                <label class="font-label-md text-primary font-bold"
+                  >Program Duration (Years) <span class="text-error">*</span></label
+                >
+                <input
+                  type="number"
+                  id="deptYears"
+                  required
+                  min="1"
+                  max="5"
+                  value="3"
+                  class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none focus:ring-4 focus:ring-secondary-container"
+                />
+                <span class="text-sm text-on-surface-variant">Semesters are calculated as years × 2.</span>
+              </div>
 
               <div class="pt-4">
                 <button
@@ -298,6 +313,9 @@
                     </th>
                     <th class="pb-4 pt-2 px-4 font-label-md text-primary">
                       Department Name
+                    </th>
+                    <th class="pb-4 pt-2 px-4 font-label-md text-primary text-center">
+                      Duration
                     </th>
                     <th
                       class="pb-4 pt-2 px-4 font-label-md text-primary text-center w-32"
@@ -354,6 +372,21 @@
             />
           </div>
 
+          <div class="flex flex-col gap-2">
+            <label class="font-label-md text-primary font-bold"
+              >Program Duration (Years) <span class="text-error">*</span></label
+            >
+            <input
+              type="number"
+              id="editDeptYears"
+              required
+              min="1"
+              max="5"
+              class="bg-white border-2 border-primary rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-secondary-container transition-shadow font-body-md w-full"
+            />
+            <span class="text-sm text-on-surface-variant">Semesters are calculated as years × 2.</span>
+          </div>
+
           <div
             class="flex justify-between items-center pt-4 mt-6 border-t border-surface-variant"
           >
@@ -393,6 +426,12 @@
       const newDeptForm = document.getElementById("newDeptForm");
       const deptTableBody = document.getElementById("deptTableBody");
       const statusMessage = document.getElementById("statusMessage");
+      const editDeptModal = document.getElementById("editDeptModal");
+      const editDeptModalContent = document.getElementById("editDeptModalContent");
+      const editDeptForm = document.getElementById("editDeptForm");
+      const editDeptName = document.getElementById("editDeptName");
+      const editDeptYears = document.getElementById("editDeptYears");
+      let editingDeptId = null;
 
       // 1. Fetch & Render Table
       async function loadDepartments() {
@@ -406,7 +445,11 @@
           <tr class="hover:bg-surface-container-lowest">
             <td class="py-4 px-4 font-label-md text-primary">${dept.id}</td>
             <td class="py-4 px-4 text-on-surface-variant font-medium">${dept.name}</td>
+            <td class="py-4 px-4 text-on-surface-variant text-center">${dept.years} year(s) / ${dept.years * 2} semesters</td>
             <td class="py-4 px-4 text-center">
+              <button onclick="openEditDept(${dept.id}, ${JSON.stringify(dept.name).replace(/"/g, '&quot;')}, ${dept.years})" class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors" title="Edit department">
+                <span class="material-symbols-outlined text-[20px]">edit</span>
+              </button>
               <button onclick="deleteDept(${dept.id})" class="text-error hover:bg-error-container p-1.5 rounded-md transition-colors">
                 <span class="material-symbols-outlined text-[20px]">delete</span>
               </button>
@@ -419,10 +462,64 @@
         }
       }
 
+      function openEditDept(id, name, years) {
+        editingDeptId = id;
+        editDeptName.value = name;
+        editDeptYears.value = years;
+        editDeptModal.classList.remove("hidden");
+        requestAnimationFrame(() => {
+          editDeptModal.classList.remove("opacity-0");
+          editDeptModalContent.classList.remove("scale-95");
+        });
+      }
+
+      function closeEditDept() {
+        editDeptModal.classList.add("opacity-0");
+        editDeptModalContent.classList.add("scale-95");
+        setTimeout(() => editDeptModal.classList.add("hidden"), 200);
+        editingDeptId = null;
+      }
+
+      editDeptForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (editingDeptId === null) return;
+
+        try {
+          const response = await apiFetch(`${API_URL}/update-department/${editingDeptId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: editDeptName.value.trim(),
+              years: parseInt(editDeptYears.value, 10),
+            }),
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            SmartAlert("error", "Update failed", result.detail || "Could not update department.");
+            return;
+          }
+          closeEditDept();
+          SmartAlert("success", "Department Updated", "Department details were updated successfully.");
+          loadDepartments();
+        } catch (err) {
+          SmartAlert("error", "Network Error", "Could not connect to the database server.");
+        }
+      });
+
+      document.getElementById("closeEditModalBtn").addEventListener("click", closeEditDept);
+      document.getElementById("cancelEditModalBtn").addEventListener("click", closeEditDept);
+      document.getElementById("deleteDeptBtn").addEventListener("click", () => {
+        if (editingDeptId !== null) deleteDept(editingDeptId);
+      });
+      editDeptModal.addEventListener("click", (event) => {
+        if (event.target === editDeptModal) closeEditDept();
+      });
+
       // 2. Add Department
       newDeptForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         const deptName = document.getElementById("deptName").value;
+        const years = parseInt(document.getElementById("deptYears").value, 10);
         const saveBtn = document.getElementById("saveDeptBtn");
 
         saveBtn.disabled = true;
@@ -433,7 +530,7 @@
           const response = await apiFetch(`${API_URL}/add-department/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: deptName }),
+            body: JSON.stringify({ name: deptName, years }),
           });
 
           const result = await response.json();

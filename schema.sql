@@ -3,8 +3,13 @@
 -- 1. Departments (No dependencies)
 CREATE TABLE IF NOT EXISTS departments (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE
+    name VARCHAR(255) NOT NULL UNIQUE,
+    years INTEGER NOT NULL DEFAULT 3 CHECK (years BETWEEN 1 AND 5)
 );
+
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS years INTEGER NOT NULL DEFAULT 3;
+ALTER TABLE departments DROP CONSTRAINT IF EXISTS departments_years_check;
+ALTER TABLE departments ADD CONSTRAINT departments_years_check CHECK (years BETWEEN 1 AND 5);
 
 -- 2. Subjects (Depends on departments)
 CREATE TABLE IF NOT EXISTS subjects (
@@ -12,8 +17,13 @@ CREATE TABLE IF NOT EXISTS subjects (
     department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     subject_type VARCHAR(50) NOT NULL CHECK (subject_type IN ('Theory', 'Practical', 'Seminar')),
-    required_sessions INTEGER NOT NULL CHECK (required_sessions > 0 AND required_sessions <= 10)
+    required_sessions INTEGER NOT NULL CHECK (required_sessions > 0 AND required_sessions <= 10),
+    semester INTEGER NOT NULL DEFAULT 1 CHECK (semester BETWEEN 1 AND 10)
 );
+
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS semester INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE subjects DROP CONSTRAINT IF EXISTS subjects_semester_check;
+ALTER TABLE subjects ADD CONSTRAINT subjects_semester_check CHECK (semester BETWEEN 1 AND 10);
 
 -- 3. Faculties (Depends on departments)
 CREATE TABLE IF NOT EXISTS faculties (
@@ -127,11 +137,14 @@ CREATE INDEX IF NOT EXISTS idx_telegram_subscriptions_target
 CREATE TABLE IF NOT EXISTS telegram_handshakes (
     chat_id BIGINT PRIMARY KEY,
     requested_role VARCHAR(20),
+    state_data TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE telegram_handshakes
     ADD COLUMN IF NOT EXISTS requested_role VARCHAR(20);
+ALTER TABLE telegram_handshakes
+    ADD COLUMN IF NOT EXISTS state_data TEXT;
 
 -- Identity records used by the Telegram integration.
 CREATE TABLE IF NOT EXISTS students (

@@ -63,7 +63,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const data = await res.json();
     globalSelect.innerHTML = "";
     data.data.forEach((dept) => {
-      globalSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+      globalSelect.innerHTML += `<option value="${dept.id}" data-years="${dept.years || 3}">${dept.name}</option>`;
     });
 
     const savedDept = localStorage.getItem("activeDeptId");

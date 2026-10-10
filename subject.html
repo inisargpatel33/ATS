@@ -216,13 +216,6 @@
                     class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
                   >
                     <option value="1">Semester 1</option>
-                    <option value="2">Semester 2</option>
-                    <option value="3">Semester 3</option>
-                    <option value="4">Semester 4</option>
-                    <option value="5">Semester 5</option>
-                    <option value="6">Semester 6</option>
-                    <option value="7">Semester 7</option>
-                    <option value="8">Semester 8</option>
                   </select>
                   <span
                     class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
@@ -307,6 +300,11 @@
                     <th
                       class="pb-4 pt-2 px-4 font-label-md text-primary text-center"
                     >
+                      Semester
+                    </th>
+                    <th
+                      class="pb-4 pt-2 px-4 font-label-md text-primary text-center"
+                    >
                       Type
                     </th>
                     <th
@@ -365,13 +363,6 @@
                 class="w-full bg-surface hand-drawn-border-sm p-3 text-body-md focus:outline-none appearance-none pr-10"
               >
                 <option value="1">Semester 1</option>
-                <option value="2">Semester 2</option>
-                <option value="3">Semester 3</option>
-                <option value="4">Semester 4</option>
-                <option value="5">Semester 5</option>
-                <option value="6">Semester 6</option>
-                <option value="7">Semester 7</option>
-                <option value="8">Semester 8</option>
               </select>
               <span
                 class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-on-surface-variant"
@@ -474,10 +465,39 @@
 
       const subjectTableBody = document.getElementById("subjectTableBody");
       const editModal = document.getElementById("editSubjectModal");
+      const semesterSelects = [
+        document.getElementById("subjectSemester"),
+        document.getElementById("editSubjectSemester"),
+      ];
+
+      function updateSemesterOptions(departmentId) {
+        const departmentOption = document.querySelector(
+          `#globalDeptSelect option[value="${departmentId}"]`,
+        );
+        const years = Math.max(
+          1,
+          Math.min(5, parseInt(departmentOption?.dataset.years || "3", 10)),
+        );
+        const semesterCount = years * 2;
+        semesterSelects.forEach((select) => {
+          if (!select) return;
+          const currentValue = select.value;
+          select.innerHTML = Array.from(
+            { length: semesterCount },
+            (_, index) =>
+              `<option value="${index + 1}">Semester ${index + 1}</option>`,
+          ).join("");
+          select.value =
+            Number(currentValue) >= 1 && Number(currentValue) <= semesterCount
+              ? currentValue
+              : "1";
+        });
+      }
 
       // --- 1. LISTEN TO GLOBAL HEADER DROPDOWN ---
       window.addEventListener("departmentReady", (e) => {
         CURRENT_DEPT_ID = parseInt(e.detail);
+        updateSemesterOptions(CURRENT_DEPT_ID);
         fetchSubjects(); // Load subjects for this specific department
       });
 

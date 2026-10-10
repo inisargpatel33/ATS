@@ -71,7 +71,9 @@ batch's targeted alerts.
 5. Verified students receive options for next lecture, today's classes, full week,
    and profile. **Full Week** sends a PDF timetable containing the same schedule
    fields shown in the timetable portal: day, time, subject, room, and faculty.
-   Faculty can view their schedule, report leave, and claim substitution bounties.
+   Faculty receive the same PDF grid for **My Schedule**. **Report Leave** shows
+   upcoming working days with lectures, supports a selected lecture or full-day
+   leave, and confirms before creating substitution opportunities.
 
 Telegram must be able to reach the deployed HTTPS endpoint. For local testing,
 use an HTTPS tunnel such as ngrok or Cloudflare Tunnel. The webhook returns
