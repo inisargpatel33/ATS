@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS batches (
     UNIQUE(department_id, semester_id, name)
 );
 
+-- Compatibility column for databases created by the earlier batch API.
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS semester INTEGER;
+UPDATE batches
+SET semester = COALESCE(semester, semester_id)
+WHERE semester IS NULL;
+
 -- 5. Rooms (Depends on departments)
 CREATE TABLE IF NOT EXISTS rooms (
     id SERIAL PRIMARY KEY,
@@ -120,7 +126,38 @@ CREATE INDEX IF NOT EXISTS idx_telegram_subscriptions_target
 
 CREATE TABLE IF NOT EXISTS telegram_handshakes (
     chat_id BIGINT PRIMARY KEY,
+    requested_role VARCHAR(20),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE telegram_handshakes
+    ADD COLUMN IF NOT EXISTS requested_role VARCHAR(20);
 
+-- Identity records used by the Telegram integration.
+CREATE TABLE IF NOT EXISTS students (
+    id SERIAL PRIMARY KEY,
+    prn VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    batch_id INTEGER NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE faculties ADD COLUMN IF NOT EXISTS security_pin VARCHAR(4);
+ALTER TABLE telegram_subscriptions ADD COLUMN IF NOT EXISTS student_id INTEGER
+    REFERENCES students(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS telegram_bounties (
+    id SERIAL PRIMARY KEY,
+    timetable_id INTEGER NOT NULL REFERENCES timetables(id) ON DELETE CASCADE,
+    specific_date DATE NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'vip'
+        CHECK (status IN ('vip', 'open', 'claimed', 'expired')),
+    claim_faculty_id INTEGER REFERENCES faculties(id) ON DELETE SET NULL,
+    voluntary_overtime BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (timetable_id, specific_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_bounties_status
+    ON telegram_bounties (status, specific_date);

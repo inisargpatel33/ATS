@@ -57,6 +57,7 @@
         display: inline-block;
         line-height: 1;
       }
+
       .hand-drawn-border {
         border: 2px solid #181919;
         border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
@@ -436,6 +437,59 @@
             </div>
           </div>
 
+          <section class="border-t border-surface-variant pt-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="font-headline-md text-lg text-primary">Students</h4>
+                <p class="text-sm text-on-surface-variant">
+                  Add PRNs manually or import a CSV with
+                  <code>prn,name</code> columns.
+                </p>
+              </div>
+              <span
+                id="studentCountMessage"
+                class="text-sm font-bold text-primary"
+              ></span>
+            </div>
+            <div class="flex gap-2">
+              <input
+                id="studentPrn"
+                type="text"
+                placeholder="University PRN"
+                class="min-w-0 flex-1 bg-surface hand-drawn-border-sm p-2 text-sm"
+              />
+              <input
+                id="studentName"
+                type="text"
+                placeholder="Student name"
+                class="min-w-0 flex-1 bg-surface hand-drawn-border-sm p-2 text-sm"
+              />
+              <button
+                type="button"
+                id="addStudentBtn"
+                class="bg-secondary-container border-2 border-primary rounded-lg px-3 font-bold"
+              >
+                Add
+              </button>
+            </div>
+            <label
+              class="inline-flex items-center gap-2 text-sm font-bold cursor-pointer"
+            >
+              <span class="material-symbols-outlined">upload_file</span> Import
+              CSV
+              <input id="studentCsv" type="file" accept=".csv" class="hidden" />
+            </label>
+            <p id="studentStatusMessage" class="text-sm hidden"></p>
+            <button
+              type="button"
+              id="viewStudentsBtn"
+              class="inline-flex items-center gap-2 bg-white border-2 border-primary rounded-lg px-3 py-2 text-sm font-bold"
+            >
+              <span class="material-symbols-outlined text-[18px]">groups</span>
+              View student list
+            </button>
+          </section>
+
           <div
             class="flex justify-between items-center pt-4 mt-6 border-t border-surface-variant"
           >
@@ -473,6 +527,19 @@
       </div>
     </div>
 
+    <div id="studentsModal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-primary/40 backdrop-blur-sm">
+      <div class="bg-surface w-[92%] max-w-2xl max-h-[80vh] overflow-hidden hand-drawn-border-sm offset-shadow-sm p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-headline-md text-2xl text-primary">Students</h3>
+          <button type="button" id="closeStudentsModalBtn" class="text-on-surface-variant hover:text-error">
+            <span class="material-symbols-outlined text-2xl">close</span>
+          </button>
+        </div>
+        <div id="studentsList" class="overflow-y-auto max-h-[55vh] space-y-2"></div>
+        <p id="studentsListStatus" class="mt-3 text-sm"></p>
+      </div>
+    </div>
+
     <script>
       const API_URL = window.location.origin.includes(":5500")
         ? "http://127.0.0.1:8000"
@@ -481,9 +548,79 @@
       let globalBatchesData = {};
       let currentlyEditingBatchId = null;
 
+      function formatApiError(result, fallback) {
+        if (!result) return fallback;
+        if (typeof result.detail === "string") return result.detail;
+        if (Array.isArray(result.detail)) {
+          return result.detail
+            .map((item) => item.msg || item.message || JSON.stringify(item))
+            .join(", ");
+        }
+        if (typeof result.message === "string") return result.message;
+        return fallback;
+      }
+
+      function openStudentList(batchId) {
+        currentlyEditingBatchId = batchId;
+        studentsModal.classList.remove("hidden");
+        studentsModal.classList.add("flex");
+        loadStudentList();
+      }
+
+      async function loadStudentList() {
+        if (!currentlyEditingBatchId) return;
+        studentsList.innerHTML = '<p class="text-on-surface-variant">Loading students...</p>';
+        studentsListStatus.textContent = "";
+        try {
+          const response = await apiFetch(
+            `${API_URL}/batches/${currentlyEditingBatchId}/students`,
+          );
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(formatApiError(result, "Could not load students."));
+          }
+          if (!result.data.length) {
+            studentsList.innerHTML = '<p class="text-on-surface-variant italic">No students added to this batch.</p>';
+            return;
+          }
+          studentsList.innerHTML = result.data.map((student) => `
+            <div class="flex items-center justify-between gap-3 border-2 border-surface-variant rounded-lg p-3">
+              <div>
+                <div class="font-bold">${student.name}</div>
+                <div class="font-mono text-sm text-on-surface-variant">${student.prn}</div>
+              </div>
+              <button type="button" class="remove-student-btn text-error border-2 border-error rounded-lg px-2 py-1 text-sm font-bold" data-student-id="${student.id}">
+                Remove
+              </button>
+            </div>
+          `).join("");
+          studentsList.querySelectorAll(".remove-student-btn").forEach((button) => {
+            button.addEventListener("click", () => removeStudent(button.dataset.studentId));
+          });
+        } catch (error) {
+          studentsList.innerHTML = `<p class="text-error">${error.message}</p>`;
+        }
+      }
+
+      async function removeStudent(studentId) {
+        if (!confirm("Remove this student from the batch?")) return;
+        const response = await apiFetch(
+          `${API_URL}/batches/${currentlyEditingBatchId}/students/${studentId}`,
+          { method: "DELETE" },
+        );
+        const result = await response.json();
+        studentsListStatus.textContent = response.ok
+          ? "Student removed."
+          : formatApiError(result, "Could not remove student.");
+        if (response.ok) loadStudentList();
+      }
+
       const batchesGrid = document.getElementById("batchesGrid");
       const addModal = document.getElementById("addBatchModal");
       const editModal = document.getElementById("editBatchModal");
+      const studentsModal = document.getElementById("studentsModal");
+      const studentsList = document.getElementById("studentsList");
+      const studentsListStatus = document.getElementById("studentsListStatus");
 
       // --- 1. LISTEN TO GLOBAL HEADER DROPDOWN ---
       window.addEventListener("departmentReady", async (e) => {
@@ -518,6 +655,102 @@
           console.error("Failed to load mentors", err);
         }
       }
+
+        async function addStudentToBatch() {
+          const prn = document.getElementById("studentPrn").value.trim();
+          const name = document.getElementById("studentName").value.trim();
+          if (!prn || !name || !currentlyEditingBatchId) return;
+          await uploadStudents([{ prn, name }]);
+          document.getElementById("studentPrn").value = "";
+          document.getElementById("studentName").value = "";
+        }
+
+      //   async function uploadStudents(students) {
+      //     const status = document.getElementById("studentStatusMessage");
+      //     try {
+      //       const response = await apiFetch(`${API_URL}/batches/${currentlyEditingBatchId}/students`, {
+      //         method: "POST", headers: { "Content-Type": "application/json" },
+      //         body: JSON.stringify({ students: students.map((s) => ({ ...s, batch_id: currentlyEditingBatchId })) }),
+      //       });
+      //       const result = await response.json();
+      //       status.textContent = response.ok ? `${result.count} student record(s) saved.` : (result.detail || "Could not save students.");
+      //       status.className = response.ok ? "text-sm text-green-700" : "text-sm text-error";
+      //     } catch (error) {
+      //       status.textContent = "Could not save students.";
+      //       status.className = "text-sm text-error";
+      //     }
+      //   }
+
+      //   document.getElementById("addStudentBtn").addEventListener("click", addStudentToBatch);
+      //   document.getElementById("studentCsv").addEventListener("change", async (event) => {
+      //     const file = event.target.files[0];
+      //     if (!file || !currentlyEditingBatchId) return;
+      //     const formData = new FormData();
+      //     formData.append("file", file);
+      //     const response = await apiFetch(`${API_URL}/batches/${currentlyEditingBatchId}/students/import`, { method: "POST", body: formData });
+      //     const result = await response.json();
+      //     const status = document.getElementById("studentStatusMessage");
+      //     status.textContent = response.ok ? `${result.count} student record(s) imported.` : (result.detail || "Import failed.");
+      //     status.className = response.ok ? "text-sm text-green-700" : "text-sm text-error";
+      //     event.target.value = "";
+      //   });
+      // }
+
+
+      async function uploadStudents(students) {
+          const status = document.getElementById("studentStatusMessage");
+          status.classList.remove("hidden"); // FIX: Make the message visible!
+
+          try {
+            const response = await apiFetch(`${API_URL}/batches/${currentlyEditingBatchId}/students`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ students: students.map((s) => ({ ...s, batch_id: currentlyEditingBatchId })) }),
+            });
+            const result = await response.json();
+
+            // FIX: Add colors, bolding, and icons for good UX
+            status.textContent = response.ok ? `✅ ${result.count} student record(s) saved.` : formatApiError(result, "Could not save students.");
+            status.className = response.ok ? "text-sm text-green-700 font-bold mt-2" : "text-sm text-error font-bold mt-2";
+          } catch (error) {
+            status.textContent = "❌ Could not save students. Server error.";
+            status.className = "text-sm text-error font-bold mt-2";
+          }
+        }
+
+        document.getElementById("addStudentBtn").addEventListener("click", addStudentToBatch);
+
+        document.getElementById("studentCsv").addEventListener("change", async (event) => {
+          const file = event.target.files[0];
+          if (!file || !currentlyEditingBatchId) return;
+
+          const status = document.getElementById("studentStatusMessage");
+          status.classList.remove("hidden"); // FIX: Show loading state
+          status.textContent = "⏳ Uploading CSV...";
+          status.className = "text-sm text-primary font-bold mt-2";
+
+          const formData = new FormData();
+          formData.append("file", file);
+          try {
+            const response = await apiFetch(`${API_URL}/batches/${currentlyEditingBatchId}/students/import`, { method: "POST", body: formData });
+            const result = await response.json();
+            status.textContent = response.ok ? `✅ ${result.count} student record(s) imported.` : formatApiError(result, "Import failed.");
+            status.className = response.ok ? "text-sm text-green-700 font-bold mt-2" : "text-sm text-error font-bold mt-2";
+          } catch (error) {
+            status.textContent = "❌ Upload failed.";
+            status.className = "text-sm text-error font-bold mt-2";
+          }
+          event.target.value = ""; // Reset file input
+        });
+
+      document.getElementById("viewStudentsBtn").addEventListener("click", () => {
+        studentsModal.classList.remove("hidden");
+        studentsModal.classList.add("flex");
+        loadStudentList();
+      });
+      document.getElementById("closeStudentsModalBtn").addEventListener("click", () => {
+        studentsModal.classList.add("hidden");
+        studentsModal.classList.remove("flex");
+      });
 
       // --- 3. FETCH BATCHES ---
       async function fetchBatches() {
@@ -563,11 +796,15 @@
               <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">school</span>
               <span class="font-label-md text-on-surface-variant">Semester: <strong class="text-primary">${batch.semester || 1}</strong></span>
             </div>
-            
+
             <div class="flex items-center gap-3">
               <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">person</span>
               <span class="font-label-md text-on-surface-variant">Mentor: <strong class="text-primary">${mentorText}</strong></span>
             </div>
+            <button type="button" onclick="openStudentList(${batch.id})" class="inline-flex items-center justify-center gap-2 bg-secondary-container border-2 border-primary rounded-lg px-3 py-2 text-sm font-bold">
+              <span class="material-symbols-outlined text-[18px]">groups</span>
+              View Students
+            </button>
           </div>
         </article>
       `;

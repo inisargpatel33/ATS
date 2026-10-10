@@ -22,6 +22,16 @@ from urllib import request as urllib_request
 from urllib.error import HTTPError, URLError
 import json
 import re
+import csv
+import io
+import sys
+from uuid import uuid4
+from fastapi import UploadFile, File
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # ⚠️ FAKE DATABASE FOR ADMIN PASSWORD 
 # Generate the bcrypt hash directly using the modern bcrypt library
@@ -54,10 +64,31 @@ def auto_configure_ngrok_and_telegram():
         return
 
     try:
-        # 1. Automatically start the Ngrok tunnel on port 8000
-        tunnel = ngrok.connect(8000)
-        public_url = tunnel.public_url
-        print(f"\n✅ Ngrok tunnel successfully started at: {public_url}")
+        # Reuse a tunnel owned by an external ngrok process when available.
+        existing_tunnel = None
+        try:
+            with urllib_request.urlopen("http://127.0.0.1:4040/api/tunnels", timeout=2) as response:
+                tunnel_data = json.loads(response.read().decode("utf-8"))
+            existing_tunnel = next(
+                (
+                    item for item in tunnel_data.get("tunnels", [])
+                    if item.get("config", {}).get("addr") in {
+                        "http://localhost:8000",
+                        "http://127.0.0.1:8000",
+                    }
+                ),
+                None,
+            )
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+            pass
+
+        if existing_tunnel:
+            public_url = existing_tunnel["public_url"]
+            print(f"\n✅ Reusing existing ngrok tunnel at: {public_url}")
+        else:
+            tunnel = ngrok.connect(8000)
+            public_url = tunnel.public_url
+            print(f"\n✅ Ngrok tunnel successfully started at: {public_url}")
 
         # 2. Automatically register this new URL with Telegram
         webhook_url = f"{public_url}/telegram/webhook"
@@ -105,6 +136,14 @@ class SubCreate(BaseModel):
     substitute_faculty_id: int
     specific_date: str # Format: YYYY-MM-DD
     
+    
+class StudentCreate(BaseModel):
+    prn: str
+    name: str
+    batch_id: Optional[int] = None
+
+class StudentListCreate(BaseModel):
+    students: List[StudentCreate]
 
 
 # =========================================================
@@ -217,6 +256,81 @@ except Exception as e:
     print("❌ Failed to initialize connection pool:", e)
     db_pool = None
 
+
+def ensure_schema_compatibility():
+    """Apply small additive migrations needed by existing installations."""
+    if db_pool is None:
+        return
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.getconn()
+        cursor = conn.cursor()
+        cursor.execute("ALTER TABLE faculties ADD COLUMN IF NOT EXISTS security_pin VARCHAR(4)")
+        cursor.execute("ALTER TABLE batches ADD COLUMN IF NOT EXISTS semester INTEGER")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS students (
+                id SERIAL PRIMARY KEY,
+                prn VARCHAR(100) NOT NULL UNIQUE,
+                name VARCHAR(255) NOT NULL,
+                batch_id INTEGER NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS telegram_subscriptions (
+                chat_id BIGINT PRIMARY KEY,
+                role VARCHAR(20) NOT NULL CHECK (role IN ('Student', 'Faculty')),
+                target_id INTEGER NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        cursor.execute("""
+            ALTER TABLE telegram_subscriptions
+            ADD COLUMN IF NOT EXISTS student_id INTEGER
+            REFERENCES students(id) ON DELETE SET NULL
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS telegram_handshakes (
+                chat_id BIGINT PRIMARY KEY,
+                requested_role VARCHAR(20),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        cursor.execute("""
+            ALTER TABLE telegram_handshakes
+            ADD COLUMN IF NOT EXISTS requested_role VARCHAR(20)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_telegram_subscriptions_target
+            ON telegram_subscriptions (role, target_id)
+        """)
+        cursor.execute("""
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'batches' AND column_name = 'semester_id'
+        """)
+        if cursor.fetchone():
+            cursor.execute(
+                "UPDATE batches SET semester = COALESCE(semester, semester_id) "
+                "WHERE semester IS NULL"
+            )
+        conn.commit()
+        print("✅ Database compatibility columns verified")
+    except Exception as exc:
+        if conn:
+            conn.rollback()
+        print(f"❌ Database compatibility migration failed: {exc}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            db_pool.putconn(conn)
+
+
+ensure_schema_compatibility()
+
     
 
 def get_db_connection():
@@ -250,7 +364,20 @@ DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 # =========================================================
 class DeptCreate(BaseModel): name: str
 class SwapValidationRequest(BaseModel): batch_id: int; faculty_id: int; room_id: int; new_day: str; new_timeslot: str
-class FacultyCreate(BaseModel): department_id: int; name: str; max_weekly_hours: int = 15
+class FacultyCreate(BaseModel):
+    department_id: int
+    name: str
+    max_weekly_hours: int = 15
+    security_pin: Optional[str] = None
+
+    @field_validator("security_pin")
+    @classmethod
+    def validate_security_pin(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and (not value.isdigit() or len(value) != 4):
+            raise ValueError("Security PIN must contain exactly 4 digits")
+        return value
+class StudentCreate(BaseModel): prn: str; name: str; batch_id: int
+class StudentImport(BaseModel): students: List[StudentCreate]
 class RoomCreate(BaseModel): name: str; capacity: int; room_type: str; amenities: List[str]; extra_features: Optional[str] = ""; is_active: bool = True
 class BatchCreate(BaseModel): name: str; student_count: int; mentor_id: Optional[int] = None; department_id: int; semester: int = 1
 class SubjectCreate(BaseModel): name: str; subject_type: str; required_sessions: int; department_id: int; semester: int = 1 
@@ -312,6 +439,42 @@ def _telegram_api(method: str, payload: dict) -> dict:
 #     except RuntimeError as exc:
 #         print(f"TELEGRAM DELIVERY ERROR chat_id={chat_id}: {exc}")
 #         return False
+def _telegram_multipart(method: str, fields: dict, file_field: str, filename: str, content: bytes) -> dict:
+    if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured")
+
+    boundary = f"----SmartSched{uuid4().hex}"
+    body = bytearray()
+    for name, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        body.extend(str(value).encode())
+        body.extend(b"\r\n")
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+        "Content-Type: application/pdf\r\n\r\n".encode()
+    )
+    body.extend(content)
+    body.extend(f"\r\n--{boundary}--\r\n".encode())
+
+    api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}"
+    http_request = urllib_request.Request(
+        api_url,
+        data=bytes(body),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urllib_request.urlopen(http_request, timeout=20) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Telegram API request failed: {exc}") from exc
+    if not result.get("ok"):
+        raise RuntimeError(f"Telegram API rejected {method}: {result}")
+    return result
+
+
 def _send_telegram_message(chat_id: int, text: str, reply_markup: dict = None) -> bool:
     payload = {"chat_id": chat_id, "text": text}
     if reply_markup:
@@ -323,6 +486,216 @@ def _send_telegram_message(chat_id: int, text: str, reply_markup: dict = None) -
     except RuntimeError as exc:
         print(f"TELEGRAM DELIVERY ERROR chat_id={chat_id}: {exc}")
         return False
+
+
+def _send_telegram_document(chat_id: int, filename: str, content: bytes, caption: str = "") -> bool:
+    try:
+        _telegram_multipart(
+            "sendDocument",
+            {"chat_id": chat_id, "caption": caption},
+            "document",
+            filename,
+            content,
+        )
+        return True
+    except RuntimeError as exc:
+        print(f"TELEGRAM DOCUMENT ERROR chat_id={chat_id}: {exc}")
+        return False
+
+
+STUDENT_MENU = {
+    "keyboard": [
+        [{"text": "⏭️ Next Lecture"}, {"text": "📅 Today's Classes"}],
+        [{"text": "🗓️ Full Week"}, {"text": "👤 My Profile"}],
+    ],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+ROLE_MENU = {
+    "keyboard": [[{"text": "🎓 Student"}, {"text": "👨‍🏫 Faculty"}]],
+    "resize_keyboard": True,
+    "one_time_keyboard": True,
+}
+FACULTY_MENU = {
+    "keyboard": [
+        [{"text": "📅 My Schedule"}, {"text": "🚨 Report Leave"}],
+        [{"text": "🙋‍♂️ Open Slots"}, {"text": "👤 My Profile"}],
+    ],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
+def _subscription(cursor, chat_id: int):
+    cursor.execute(
+        "SELECT role, target_id FROM telegram_subscriptions WHERE chat_id = %s",
+        (chat_id,),
+    )
+    return cursor.fetchone()
+
+
+def _student_classes(cursor, chat_id: int, day: Optional[str] = None) -> list:
+    query = """
+        SELECT t.timeslot, s.name AS subject, r.name AS room, f.name AS faculty,
+               t.day_of_week
+        FROM telegram_subscriptions ts
+        JOIN timetables t ON t.batch_id = ts.target_id
+        JOIN subjects s ON s.id = t.subject_id
+        JOIN rooms r ON r.id = t.room_id
+        JOIN faculties f ON f.id = t.faculty_id
+        WHERE ts.chat_id = %s AND ts.role = 'Student'
+    """
+    params = [chat_id]
+    if day:
+        query += " AND t.day_of_week = %s"
+        params.append(day)
+    query += " ORDER BY t.day_of_week, t.timeslot"
+    cursor.execute(query, params)
+    return cursor.fetchall()
+
+
+def _student_today(chat_id: int) -> str:
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        rows = _student_classes(cursor, chat_id, TELEGRAM_DAYS[datetime.now().weekday()]
+                                if datetime.now().weekday() < 5 else None)
+        if not rows:
+            return "🎉 You have no classes scheduled today."
+        return "📅 Today's Classes\n\n" + "\n".join(
+            f"• {r['timeslot']} — {r['subject']} | {r['room']} | {r['faculty']}"
+            for r in rows
+        )
+    finally:
+        cursor.close(); release_db_connection(conn)
+
+
+def _student_week(chat_id: int) -> str:
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        rows = _student_classes(cursor, chat_id)
+        if not rows:
+            return "No published timetable was found for your batch yet."
+        grouped = defaultdict(list)
+        for row in rows:
+            grouped[row["day_of_week"]].append(row)
+        lines = ["🗓️ Full Week"]
+        for day in TELEGRAM_DAYS:
+            if grouped.get(day):
+                lines.append(f"\n{TELEGRAM_DAY_NAMES[day]}")
+                lines.extend(f"• {r['timeslot']} — {r['subject']} ({r['room']}, {r['faculty']})"
+                             for r in grouped[day])
+        return "\n".join(lines)
+    finally:
+        cursor.close(); release_db_connection(conn)
+
+
+def _profile(chat_id: int) -> str:
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT st.name, st.prn, b.name AS batch
+            FROM telegram_subscriptions ts
+            JOIN students st ON st.id = ts.student_id
+            JOIN batches b ON b.id = st.batch_id
+            WHERE ts.chat_id = %s AND ts.role = 'Student'
+        """, (chat_id,))
+        student = cursor.fetchone()
+        if student:
+            return f"👤 My Profile\n\nName: {student['name']}\nPRN: {student['prn']}\nBatch: {student['batch']}\n\nUse /unlink to switch accounts."
+        cursor.execute("""
+            SELECT f.name, f.id FROM telegram_subscriptions ts
+            JOIN faculties f ON f.id = ts.target_id
+            WHERE ts.chat_id = %s AND ts.role = 'Faculty'
+        """, (chat_id,))
+        faculty = cursor.fetchone()
+        return (f"👤 My Profile\n\nName: {faculty['name']}\nFaculty ID: {faculty['id']}\n\n"
+                "Use /unlink to switch accounts.") if faculty else "You are not verified."
+    finally:
+        cursor.close(); release_db_connection(conn)
+
+
+def _open_slots(cursor, faculty_id: int) -> str:
+    cursor.execute("""SELECT tb.id, s.name AS subject, b.name AS batch, t.timeslot,
+        r.name AS room, tb.status FROM telegram_bounties tb
+        JOIN timetables t ON t.id=tb.timetable_id JOIN subjects s ON s.id=t.subject_id
+        JOIN batches b ON b.id=t.batch_id JOIN rooms r ON r.id=t.room_id
+        WHERE tb.status IN ('vip','open') AND tb.specific_date=CURRENT_DATE
+        ORDER BY t.timeslot""")
+    rows = cursor.fetchall()
+    return "🙋‍♂️ Open Slots\n\n" + ("\n".join(
+        f"• CLAIM {r['id']} — {r['timeslot']} {r['subject']} for {r['batch']} ({r['room']})"
+        for r in rows
+    ) or "No open slots today.")
+
+
+def _claim_bounty(cursor, conn, chat_id: int, faculty_id: int, bounty_id: int) -> None:
+    cursor.execute("""SELECT tb.id, tb.timetable_id, tb.specific_date, tb.status, t.batch_id,
+        t.timeslot, s.name AS subject, f.name AS faculty, b.name AS batch
+        FROM telegram_bounties tb JOIN timetables t ON t.id=tb.timetable_id
+        JOIN subjects s ON s.id=t.subject_id JOIN faculties f ON f.id=%s
+        JOIN batches b ON b.id=t.batch_id WHERE tb.id=%s FOR UPDATE""", (faculty_id, bounty_id))
+    bounty = cursor.fetchone()
+    if not bounty or bounty["status"] not in {"vip", "open"}:
+        _send_telegram_message(chat_id, "That bounty is no longer available.", FACULTY_MENU); return
+    cursor.execute("""UPDATE telegram_bounties SET status='claimed', claim_faculty_id=%s,
+        voluntary_overtime=TRUE, updated_at=NOW() WHERE id=%s AND status IN ('vip','open')""",
+                   (faculty_id, bounty_id))
+    if cursor.rowcount != 1:
+        conn.rollback(); _send_telegram_message(chat_id, "That bounty was claimed by another professor.", FACULTY_MENU); return
+    cursor.execute("""INSERT INTO daily_substitutes (timetable_id, substitute_faculty_id, specific_date)
+        VALUES (%s,%s,%s) ON CONFLICT (timetable_id,specific_date)
+        DO UPDATE SET substitute_faculty_id=EXCLUDED.substitute_faculty_id""",
+                   (bounty["timetable_id"], faculty_id, bounty["specific_date"]))
+    conn.commit()
+    _send_telegram_message(chat_id, f"✅ CLAIM {bounty_id} confirmed. This is logged as voluntary overtime.", FACULTY_MENU)
+    _notify_batch_subscribers(bounty["batch_id"], f"⚠️ Update: Your {bounty['timeslot']} {bounty['subject']} class is now covered by {bounty['faculty']}.")
+
+
+def _create_leave_and_bounties(cursor, conn, chat_id: int, faculty_id: int, leave_date) -> None:
+    cursor.execute("INSERT INTO faculty_leave (faculty_id, leave_date, reason) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
+                   (faculty_id, leave_date, "Reported through Telegram"))
+    day = leave_date.strftime("%a")
+    cursor.execute("""SELECT id, batch_id, subject_id, timeslot FROM timetables
+        WHERE faculty_id=%s AND day_of_week=%s""", (faculty_id, day))
+    affected = cursor.fetchall()
+    for slot in affected:
+        cursor.execute("""INSERT INTO telegram_bounties (timetable_id,specific_date,status)
+            VALUES (%s,%s,'vip') ON CONFLICT (timetable_id,specific_date)
+            DO UPDATE SET status='vip', updated_at=NOW()""", (slot["id"], leave_date))
+    conn.commit()
+    for slot in affected:
+        _send_telegram_message(chat_id, f"✅ Leave recorded for {leave_date}. Bounty {slot['id']} is now being offered to eligible faculty.")
+        cursor.execute("""SELECT DISTINCT ts.chat_id FROM telegram_subscriptions ts
+            JOIN faculty_expertise fe ON fe.faculty_id=ts.target_id
+            WHERE ts.role='Faculty' AND fe.subject_id=%s AND ts.target_id<>%s""",
+                       (slot["subject_id"], faculty_id))
+        for row in cursor.fetchall():
+            _send_telegram_message(row["chat_id"],
+                f"🚨 Priority Room Available! Reply CLAIM {slot['id']} to cover the {slot['timeslot']} class for batch {slot['batch_id']}.",
+                FACULTY_MENU)
+    for slot in affected:
+        _notify_batch_subscribers(slot["batch_id"], f"🚨 URGENT UPDATE: Your {slot['timeslot']} class has been reported absent. Please check Today's Classes for updates.")
+
+
+def _refresh_bounties(cursor) -> None:
+    """Advance VIP bounties and expire slots that are inside the 90-minute cutoff."""
+    now = datetime.now()
+    cursor.execute("""SELECT tb.id, tb.timetable_id, tb.status, tb.created_at, t.batch_id, t.timeslot,
+        s.name AS subject FROM telegram_bounties tb JOIN timetables t ON t.id=tb.timetable_id
+        JOIN subjects s ON s.id=t.subject_id WHERE tb.specific_date=CURRENT_DATE
+        AND tb.status IN ('vip','open')""")
+    for bounty in cursor.fetchall():
+        start = _parse_slot_start(bounty["timeslot"])
+        if not start:
+            continue
+        lecture_start = datetime.combine(now.date(), start.time())
+        minutes_until = (lecture_start - now).total_seconds() / 60
+        if minutes_until <= 90:
+            cursor.execute("UPDATE telegram_bounties SET status='expired', updated_at=NOW() WHERE id=%s AND status IN ('vip','open')", (bounty["id"],))
+            if cursor.rowcount:
+                _notify_batch_subscribers(bounty["batch_id"], f"🚨 Alert: Your {bounty['timeslot']} {bounty['subject']} lecture is officially cancelled today. Enjoy your free period.")
+        elif bounty["status"] == "vip" and (now - bounty["created_at"].replace(tzinfo=None)).total_seconds() >= 900:
+            cursor.execute("UPDATE telegram_bounties SET status='open', updated_at=NOW() WHERE id=%s AND status='vip'", (bounty["id"],))
 
 
 def _notify_batch_subscribers(batch_id: int, message: str) -> int:
@@ -382,6 +755,50 @@ def _parse_slot_start(slot: str) -> Optional[datetime]:
     )
 
 
+def _get_today_schedule(target_id: int, role: str) -> str:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        today_str = datetime.now().astimezone().strftime("%a")
+        if today_str not in TELEGRAM_DAYS:
+            return "📅 Enjoy your weekend! No classes scheduled today."
+            
+        if role == "Student":
+            cursor.execute("""
+                SELECT t.timeslot, s.name as subject, r.name as room, f.name as faculty
+                FROM timetables t
+                JOIN subjects s ON t.subject_id = s.id
+                JOIN rooms r ON t.room_id = r.id
+                JOIN faculties f ON t.faculty_id = f.id
+                WHERE t.batch_id = %s AND t.day_of_week = %s
+                ORDER BY t.timeslot
+            """, (target_id, today_str))
+        elif role == "Faculty":
+            cursor.execute("""
+                SELECT t.timeslot, s.name as subject, r.name as room, b.name as batch
+                FROM timetables t
+                JOIN subjects s ON t.subject_id = s.id
+                JOIN rooms r ON t.room_id = r.id
+                JOIN batches b ON t.batch_id = b.id
+                WHERE t.faculty_id = %s AND t.day_of_week = %s
+                ORDER BY t.timeslot
+            """, (target_id, today_str))
+            
+        records = cursor.fetchall()
+        if not records:
+            return f"📅 You have a free day today ({TELEGRAM_DAY_NAMES.get(today_str, today_str)})! No classes scheduled."
+            
+        msg = f"📅 *Today's Schedule ({TELEGRAM_DAY_NAMES.get(today_str, today_str)})*\n\n"
+        for rec in records:
+            if role == "Student":
+                msg += f"🕒 {rec['timeslot']}\n📚 {rec['subject']}\n📍 {rec['room']} | 👨‍🏫 Prof. {rec['faculty']}\n\n"
+            else:
+                msg += f"🕒 {rec['timeslot']}\n📚 {rec['subject']} ({rec['batch']})\n📍 {rec['room']}\n\n"
+        return msg
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
 def _next_lecture(chat_id: int) -> str:
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -434,6 +851,443 @@ def _next_lecture(chat_id: int) -> str:
     )
 
 
+# def _process_telegram_update(update: dict) -> None:
+#     message = update.get("message") or {}
+#     chat = message.get("chat") or {}
+#     chat_id = chat.get("id")
+#     text = (message.get("text") or "").strip()
+#     if chat_id is None or not text:
+#         return
+
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#     try:
+#         text_lower = text.lower()
+#         _refresh_bounties(cursor)
+#         conn.commit()
+#         subscription = _subscription(cursor, chat_id)
+
+#         if text_lower in {"/start", "start"}:
+#             if subscription:
+#                 _send_telegram_message(chat_id, "Your account is already verified.", STUDENT_MENU if subscription["role"] == "Student" else FACULTY_MENU)
+#             else:
+#                 cursor.execute("INSERT INTO telegram_handshakes (chat_id) VALUES (%s) ON CONFLICT DO NOTHING", (chat_id,))
+#                 conn.commit()
+#                 _send_telegram_message(chat_id, "Welcome to the University Timetable Portal! 🎓\n\nReply with your official University PRN (e.g., PCU-MCA-2026-042) to continue.\n\nFaculty? Reply with your Faculty ID and 4-Digit Security PIN (e.g., 12 8492).")
+#             return
+
+#         if text_lower == "/unlink":
+#             cursor.execute("DELETE FROM telegram_subscriptions WHERE chat_id = %s", (chat_id,))
+#             cursor.execute("DELETE FROM telegram_handshakes WHERE chat_id = %s", (chat_id,))
+#             conn.commit()
+#             _send_telegram_message(chat_id, "Your Telegram account has been unlinked. Send /start to verify a different account.", {"remove_keyboard": True})
+#             return
+
+#         # A verified chat can only use its own role's menu and claim flow.
+#         if subscription:
+#             if subscription["role"] == "Student":
+#                 responses = {
+#                     "⏭️ next lecture": lambda: _next_lecture(chat_id),
+#                     "next": lambda: _next_lecture(chat_id),
+#                     "/next": lambda: _next_lecture(chat_id),
+#                     "📅 today's classes": lambda: _student_today(chat_id),
+#                     "🗓️ full week": lambda: _student_week(chat_id),
+#                     "👤 my profile": lambda: _profile(chat_id),
+#                 }
+#                 response = responses.get(text_lower)
+#                 if response:
+#                     _send_telegram_message(chat_id, response(), STUDENT_MENU)
+#                     return
+#             else:
+#                 if text_lower == "👤 my profile":
+#                     _send_telegram_message(chat_id, _profile(chat_id), FACULTY_MENU); return
+#                 if text_lower in {"📅 my schedule", "my schedule"}:
+#                     cursor.execute("""SELECT t.day_of_week, t.timeslot, s.name AS subject, b.name AS batch, r.name AS room
+#                         FROM timetables t JOIN subjects s ON s.id=t.subject_id JOIN batches b ON b.id=t.batch_id
+#                         JOIN rooms r ON r.id=t.room_id WHERE t.faculty_id=%s ORDER BY t.day_of_week,t.timeslot""", (subscription["target_id"],))
+#                     rows = cursor.fetchall()
+#                     _send_telegram_message(chat_id, "📅 My Schedule\n\n" + ("\n".join(f"• {r['day_of_week']} {r['timeslot']} — {r['subject']} ({r['batch']}, {r['room']})" for r in rows) or "No classes found."), FACULTY_MENU); return
+#                 if text_lower == "🚨 report leave":
+#                     _send_telegram_message(chat_id, "Reply with the leave date in YYYY-MM-DD format."); return
+#                 if text_lower == "🙋‍♂️ open slots":
+#                     _send_telegram_message(chat_id, _open_slots(cursor, subscription["target_id"]), FACULTY_MENU); return
+#                 claim = re.match(r"^claim\s+(\d+)$", text, re.IGNORECASE)
+#                 if claim:
+#                     _claim_bounty(cursor, conn, chat_id, subscription["target_id"], int(claim.group(1)))
+#                     return
+
+#         # Verification is only accepted after /start and never by batch name.
+#         if re.fullmatch(r"\d+\s+\d{4}", text):
+#             faculty_id, pin = text.split()
+#             cursor.execute("SELECT id, name FROM faculties WHERE id=%s AND security_pin=%s", (int(faculty_id), pin))
+#             faculty = cursor.fetchone()
+#             if faculty:
+#                 cursor.execute("""INSERT INTO telegram_subscriptions (chat_id, role, target_id, student_id)
+#                     VALUES (%s,'Faculty',%s,NULL) ON CONFLICT(chat_id) DO UPDATE SET role='Faculty',target_id=EXCLUDED.target_id,student_id=NULL,updated_at=NOW()""", (chat_id, faculty["id"]))
+#                 conn.commit()
+#                 _send_telegram_message(chat_id, f"✅ Verified. Welcome, {faculty['name']}.", FACULTY_MENU); return
+#             _send_telegram_message(chat_id, "Faculty ID or security PIN was not recognized. Please try again."); return
+
+#         if re.fullmatch(r"[A-Za-z0-9-]{6,100}", text):
+#             cursor.execute("SELECT id, name, prn, batch_id FROM students WHERE LOWER(prn)=LOWER(%s)", (text,))
+#             student = cursor.fetchone()
+#             if student:
+#                 cursor.execute("""INSERT INTO telegram_subscriptions (chat_id, role, target_id, student_id)
+#                     VALUES (%s,'Student',%s,%s) ON CONFLICT(chat_id) DO UPDATE SET role='Student',target_id=EXCLUDED.target_id,student_id=EXCLUDED.student_id,updated_at=NOW()""",
+#                                (chat_id, student["batch_id"], student["id"]))
+#                 cursor.execute("DELETE FROM telegram_handshakes WHERE chat_id=%s", (chat_id,))
+#                 conn.commit()
+#                 _send_telegram_message(chat_id, f"✅ Verified, {student['name']}! Your schedule is linked.", STUDENT_MENU); return
+
+#         # Date replies from a verified faculty account create leave records.
+#         if subscription and subscription["role"] == "Faculty":
+#             try:
+#                 leave_date = datetime.strptime(text, "%Y-%m-%d").date()
+#             except ValueError:
+#                 leave_date = None
+#             if leave_date:
+#                 _create_leave_and_bounties(cursor, conn, chat_id, subscription["target_id"], leave_date)
+#                 return
+
+#         _send_telegram_message(chat_id, "I could not verify that identity. Send /start and use your PRN, or Faculty ID and 4-digit PIN.")
+
+#     except Exception as exc:
+#         conn.rollback()
+#         print(f"TELEGRAM UPDATE ERROR chat_id={chat_id}: {exc}")
+#         _send_telegram_message(chat_id, "I could not process that request. Please try again.")
+#     finally:
+#         cursor.close()
+#         release_db_connection(conn)
+
+
+def _process_telegram_update_legacy(update: dict) -> None:
+    message = update.get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    text = (message.get("text") or "").strip()
+    if chat_id is None or not text:
+        return
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Check if the user is already securely verified in the database
+        cursor.execute("SELECT role, target_id, student_id FROM telegram_subscriptions WHERE chat_id = %s", (chat_id,))
+        user_sub = cursor.fetchone()
+
+        # ==========================================
+        # STEP 1: IDENTITY ONBOARDING (UNVERIFIED)
+        # ==========================================
+        if not user_sub:
+            if text.lower() == "/start":
+                _send_telegram_message(
+                    chat_id,
+                    "Welcome to the University Timetable Portal! 🎓\n\n"
+                    "👨‍🎓 *Students:* Reply with your official PRN (e.g., PCU-MCA-2026-042).\n"
+                    "👨‍🏫 *Faculty:* Reply with your Faculty ID and 4-Digit PIN (e.g., 12 8492).",
+                    reply_markup={"remove_keyboard": True}
+                )
+                return
+
+            # Check for Faculty PIN Authentication Format (e.g., "12 8492")
+            faculty_match = re.match(r"^(\d+)\s+(\d{4})$", text)
+            if faculty_match:
+                fac_id, pin = faculty_match.groups()
+                cursor.execute("SELECT id, name FROM faculties WHERE id = %s AND security_pin = %s", (int(fac_id), pin))
+                faculty = cursor.fetchone()
+                if faculty:
+                    cursor.execute("INSERT INTO telegram_subscriptions (chat_id, role, target_id) VALUES (%s, 'Faculty', %s)", (chat_id, faculty["id"]))
+                    conn.commit()
+                    
+                    faculty_menu = {
+                        "keyboard": [[{"text": "📅 My Schedule"}, {"text": "🚨 Report Leave"}], [{"text": "🙋‍♂️ Open Slots"}, {"text": "👤 My Profile"}]],
+                        "resize_keyboard": True, "is_persistent": True
+                    }
+                    _send_telegram_message(chat_id, f"✅ Identity Verified. Welcome Prof. {faculty['name']}!", reply_markup=faculty_menu)
+                    return
+                else:
+                    _send_telegram_message(chat_id, "❌ Invalid Faculty ID or PIN.")
+                    return
+
+            # Check for Student PRN Authentication Format (Alphanumeric, no spaces)
+            cursor.execute("SELECT id, name, batch_id FROM students WHERE UPPER(prn) = UPPER(%s)", (text,))
+            student = cursor.fetchone()
+            if student:
+                cursor.execute("INSERT INTO telegram_subscriptions (chat_id, role, target_id, student_id) VALUES (%s, 'Student', %s, %s)", (chat_id, student["batch_id"], student["id"]))
+                cursor.execute("SELECT name FROM batches WHERE id = %s", (student["batch_id"],))
+                batch_name = cursor.fetchone()["name"]
+                conn.commit()
+                
+                student_menu = {
+                    "keyboard": [[{"text": "⏭️ Next Lecture"}, {"text": "📅 Today's Classes"}], [{"text": "🗓️ Full Week"}, {"text": "👤 My Profile"}]],
+                    "resize_keyboard": True, "is_persistent": True
+                }
+                _send_telegram_message(chat_id, f"✅ Identity Verified. Welcome {student['name']}!\nYou are securely linked to {batch_name}.", reply_markup=student_menu)
+                return
+
+            # Failsafe for unverified users typing random strings
+            _send_telegram_message(chat_id, "❌ Identity not found. Please enter a valid PRN or Faculty PIN, or contact your Administrator.")
+            return
+
+        # ==========================================
+        # STEP 2: VERIFIED USER MENU ROUTING
+        # ==========================================
+        role = user_sub["role"]
+        
+        # Global Unlink Command
+        if text.lower() == "/unlink":
+            cursor.execute("DELETE FROM telegram_subscriptions WHERE chat_id = %s", (chat_id,))
+            conn.commit()
+            _send_telegram_message(chat_id, "🔌 Account unlinked successfully. Send /start to reconnect.", reply_markup={"remove_keyboard": True})
+            return
+
+        # --- STUDENT LOGIC ---
+        # --- STUDENT LOGIC ---
+        if role == "Student":
+            student_menu = {
+                "keyboard": [[{"text": "⏭️ Next Lecture"}, {"text": "📅 Today's Classes"}], [{"text": "🗓️ Full Week"}, {"text": "👤 My Profile"}]],
+                "resize_keyboard": True, "is_persistent": True
+            }
+            
+            if text == "⏭️ Next Lecture":
+                _send_telegram_message(chat_id, _next_lecture(chat_id), reply_markup=student_menu)
+            
+            elif text == "📅 Today's Classes":
+                _send_telegram_message(chat_id, _get_today_schedule(user_sub["target_id"], "Student"), reply_markup=student_menu)
+                
+            elif text == "🗓️ Full Week":
+                _send_telegram_message(chat_id, "🗓️ Your full weekly schedule is being generated. (PDF/Image generation coming in v2!)", reply_markup=student_menu)
+                
+            elif text == "👤 My Profile":
+                cursor.execute("SELECT s.name, s.prn, b.name as batch FROM students s JOIN batches b ON s.batch_id = b.id WHERE s.id = %s", (user_sub["student_id"],))
+                prof = cursor.fetchone()
+                msg = f"👤 *Student Profile*\nName: {prof['name']}\nPRN: {prof['prn']}\nBatch: {prof['batch']}\n\nType /unlink to switch accounts."
+                _send_telegram_message(chat_id, msg, reply_markup=student_menu)
+            
+            else:
+                _send_telegram_message(chat_id, "Please select an option from the menu below:", reply_markup=student_menu)
+            student_menu = {
+                "keyboard": [[{"text": "⏭️ Next Lecture"}, {"text": "📅 Today's Classes"}], [{"text": "🗓️ Full Week"}, {"text": "👤 My Profile"}]],
+                "resize_keyboard": True, "is_persistent": True
+            }
+            
+            if text == "⏭️ Next Lecture":
+                _send_telegram_message(chat_id, _next_lecture(chat_id), reply_markup=student_menu)
+            
+            elif text == "📅 Today's Classes":
+                # To be implemented: Query DB for CURRENT_DATE
+                _send_telegram_message(chat_id, "📅 *Fetching Today's Schedule...*", reply_markup=student_menu)
+                
+            elif text == "👤 My Profile":
+                cursor.execute("SELECT s.name, s.prn, b.name as batch FROM students s JOIN batches b ON s.batch_id = b.id WHERE s.id = %s", (user_sub["student_id"],))
+                prof = cursor.fetchone()
+                msg = f"👤 *Student Profile*\nName: {prof['name']}\nPRN: {prof['prn']}\nBatch: {prof['batch']}\n\nType /unlink to switch accounts."
+                _send_telegram_message(chat_id, msg, reply_markup=student_menu)
+            
+            else:
+                _send_telegram_message(chat_id, "Please select an option from the menu below:", reply_markup=student_menu)
+
+        # --- FACULTY LOGIC ---
+       # --- FACULTY LOGIC ---
+        elif role == "Faculty":
+            faculty_menu = {
+                "keyboard": [[{"text": "📅 My Schedule"}, {"text": "🚨 Report Leave"}], [{"text": "🙋‍♂️ Open Slots"}, {"text": "👤 My Profile"}]],
+                "resize_keyboard": True, "is_persistent": True
+            }
+            
+            if text == "📅 My Schedule":
+                _send_telegram_message(chat_id, _get_today_schedule(user_sub["target_id"], "Faculty"), reply_markup=faculty_menu)
+                
+            elif text == "👤 My Profile":
+                cursor.execute("SELECT name, max_weekly_hours FROM faculties WHERE id = %s", (user_sub["target_id"],))
+                fac = cursor.fetchone()
+                _send_telegram_message(chat_id, f"👤 *Faculty Profile*\nName: Prof. {fac['name']}\nMax Hours: {fac['max_weekly_hours']}\n\nType /unlink to log out.", reply_markup=faculty_menu)
+                
+            elif text == "🚨 Report Leave":
+                _send_telegram_message(chat_id, "🚨 The Autonomous Substitution Engine is standing by. (Bounty logic coming next!)", reply_markup=faculty_menu)
+                
+            elif text == "🙋‍♂️ Open Slots":
+                _send_telegram_message(chat_id, "🙋‍♂️ Checking for open bounties... (Bounty logic coming next!)", reply_markup=faculty_menu)
+                
+            else:
+                _send_telegram_message(chat_id, "🚧 Menu option received. Please use the menu below:", reply_markup=faculty_menu)
+            faculty_menu = {
+                "keyboard": [[{"text": "📅 My Schedule"}, {"text": "🚨 Report Leave"}], [{"text": "🙋‍♂️ Open Slots"}, {"text": "👤 My Profile"}]],
+                "resize_keyboard": True, "is_persistent": True
+            }
+            
+            if text == "👤 My Profile":
+                cursor.execute("SELECT name, max_weekly_hours FROM faculties WHERE id = %s", (user_sub["target_id"],))
+                fac = cursor.fetchone()
+                _send_telegram_message(chat_id, f"👤 *Faculty Profile*\nName: Prof. {fac['name']}\nMax Hours: {fac['max_weekly_hours']}\n\nType /unlink to log out.", reply_markup=faculty_menu)
+                
+            elif text == "🚨 Report Leave":
+                _send_telegram_message(chat_id, "🚨 To report a leave, please contact the Administrator to trigger the Autonomous Substitution Engine.", reply_markup=faculty_menu)
+                
+            else:
+                _send_telegram_message(chat_id, "🚧 Menu option received. Please use the menu below:", reply_markup=faculty_menu)
+
+    except Exception as exc:
+        conn.rollback()
+        print(f"TELEGRAM UPDATE ERROR chat_id={chat_id}: {exc}")
+        _send_telegram_message(chat_id, "An error occurred while processing your request.")
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+def _pdf_escape(value: str) -> str:
+    return str(value).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _build_student_week_pdf(chat_id: int) -> tuple[bytes, str]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT st.name, st.prn, b.name AS batch
+            FROM telegram_subscriptions ts
+            JOIN students st ON st.id = ts.student_id
+            JOIN batches b ON b.id = st.batch_id
+            WHERE ts.chat_id = %s AND ts.role = 'Student'
+        """, (chat_id,))
+        student = cursor.fetchone()
+        rows = _student_classes(cursor, chat_id)
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+    if not student or not rows:
+        return b"", ""
+
+    page_width, page_height = 842, 595
+    margin = 36
+    table_width = page_width - (margin * 2)
+    time_width = 92
+    day_width = (table_width - time_width) / 5
+    row_height = 58
+    header_height = 28
+    rows_per_page = 7
+    time_order = []
+    for row in rows:
+        if row["timeslot"] not in time_order:
+            time_order.append(row["timeslot"])
+    time_order.sort(key=lambda value: _parse_slot_start(value) or datetime.max)
+    schedule = {(row["day_of_week"], row["timeslot"]): row for row in rows}
+
+    def shorten(value: object, max_chars: int) -> str:
+        text = str(value or "")
+        return text if len(text) <= max_chars else text[:max_chars - 3] + "..."
+
+    def text_command(value: object, x: float, y: float, size: int = 9) -> str:
+        return f"BT /F1 {size} Tf 1 0 0 1 {x:.1f} {y:.1f} Tm ({_pdf_escape(value)}) Tj ET"
+
+    def table_page(page_times: list, page_number: int, total_pages: int) -> bytes:
+        commands = [
+            text_command("SmartSched Uni - Weekly Timetable", margin, 550, 18),
+            text_command(f"Student: {student['name']}", margin, 528, 10),
+            text_command(
+                f"PRN: {student['prn']}    Batch: {student['batch']}",
+                margin + 300,
+                528,
+                10,
+            ),
+            text_command(f"Page {page_number} of {total_pages}", 750, 550, 8),
+        ]
+        table_top = 505
+        x_positions = [margin, margin + time_width]
+        x_positions.extend(margin + time_width + day_width * index for index in range(1, 6))
+        table_bottom = table_top - header_height - (row_height * len(page_times))
+
+        commands.extend([
+            "0.88 0.91 0.96 rg",
+            f"{margin} {table_top - header_height} {table_width} {header_height} re f",
+        ])
+        for index in range(len(page_times)):
+            if index % 2 == 1:
+                row_y = table_top - header_height - (row_height * (index + 1))
+                commands.extend([
+                    "0.97 0.98 1 rg",
+                    f"{margin} {row_y} {table_width} {row_height} re f",
+                ])
+
+        commands.extend([
+            "0.25 0.30 0.38 RG",
+            "0.8 w",
+            f"{margin} {table_bottom} {table_width} {table_top - table_bottom} re S",
+        ])
+        for x in x_positions[1:-1]:
+            commands.append(f"{x} {table_bottom} m {x} {table_top} l S")
+        for index in range(len(page_times) + 1):
+            y = table_top - header_height - (row_height * index)
+            commands.append(f"{margin} {y} m {margin + table_width} {y} l S")
+
+        # Reset the fill color after drawing backgrounds so all labels and
+        # timetable content render with readable black text.
+        commands.append("0 0 0 rg")
+        commands.append(text_command("Time", margin + 8, table_top - 19, 9))
+        for day_index, day in enumerate(TELEGRAM_DAYS):
+            commands.append(text_command(
+                TELEGRAM_DAY_NAMES[day],
+                x_positions[day_index + 1] + 7,
+                table_top - 19,
+                9,
+            ))
+        for row_index, timeslot in enumerate(page_times):
+            cell_top = table_top - header_height - row_height * row_index
+            commands.append(text_command(timeslot, margin + 8, cell_top - 22, 8))
+            for day_index, day in enumerate(TELEGRAM_DAYS):
+                row = schedule.get((day, timeslot))
+                if not row:
+                    continue
+                x = x_positions[day_index + 1] + 7
+                commands.append(text_command(shorten(row["subject"], 30), x, cell_top - 17, 8))
+                commands.append(text_command(shorten(f"Room: {row['room']}", 30), x, cell_top - 31, 7))
+                commands.append(text_command(shorten(f"Prof. {row['faculty']}", 30), x, cell_top - 44, 7))
+        return "\n".join(commands).encode("latin-1", "replace")
+
+    total_pages = max(1, (len(time_order) + rows_per_page - 1) // rows_per_page)
+    objects = []
+    page_streams = []
+    for page_index, page_start in enumerate(range(0, len(time_order), rows_per_page), start=1):
+        page_streams.append(
+            table_page(time_order[page_start:page_start + rows_per_page], page_index, total_pages)
+        )
+
+    objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+    page_refs = " ".join(f"{3 + index * 2} 0 R" for index in range(len(page_streams)))
+    objects.append(f"<< /Type /Pages /Kids [{page_refs}] /Count {len(page_streams)} >>".encode())
+    for index, stream in enumerate(page_streams):
+        page_number = 3 + index * 2
+        content_number = page_number + 1
+        objects.append(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width} {page_height}] "
+            f"/Resources << /Font << /F1 {3 + len(page_streams) * 2} 0 R >> >> "
+            f"/Contents {content_number} 0 R >>".encode()
+        )
+        objects.append(
+            b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n"
+            + stream + b"\nendstream"
+        )
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+    pdf = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{number} 0 obj\n".encode())
+        pdf.extend(obj)
+        pdf.extend(b"\nendobj\n")
+    xref_offset = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode())
+    pdf.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_offset}\n%%EOF\n".encode()
+    )
+    return bytes(pdf), f"{student['prn']}_weekly_timetable.pdf"
+
+
 def _process_telegram_update(update: dict) -> None:
     message = update.get("message") or {}
     chat = message.get("chat") or {}
@@ -445,102 +1299,171 @@ def _process_telegram_update(update: dict) -> None:
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        text_lower = text.lower()
-        
-        # --- 1. /faculty COMMAND ---
-        faculty_match = re.match(r"^/?faculty\s+(\d+)$", text, re.IGNORECASE)
-        if faculty_match:
-            faculty_id = int(faculty_match.group(1))
-            cursor.execute("SELECT id, name FROM faculties WHERE id = %s", (faculty_id,))
-            faculty = cursor.fetchone()
-            if not faculty:
-                _send_telegram_message(chat_id, "That faculty ID was not found.")
-                return
-            cursor.execute(
-                """
-                INSERT INTO telegram_subscriptions (chat_id, role, target_id)
-                VALUES (%s, 'Faculty', %s)
-                ON CONFLICT (chat_id) DO UPDATE SET role = 'Faculty',
-                    target_id = EXCLUDED.target_id, updated_at = NOW()
-                """,
-                (chat_id, faculty_id),
-            )
-            conn.commit()
-            _send_telegram_message(chat_id, f"✅ This chat is linked to {faculty['name']}.")
-            return
+        cursor.execute(
+            "SELECT role, target_id, student_id FROM telegram_subscriptions WHERE chat_id = %s",
+            (chat_id,),
+        )
+        subscription = cursor.fetchone()
+        cursor.execute(
+            "SELECT requested_role FROM telegram_handshakes WHERE chat_id = %s",
+            (chat_id,),
+        )
+        handshake = cursor.fetchone()
 
-        # --- 2. /next COMMAND ---
-        if text_lower in {"/next", "next", "my schedule", "where is my next lecture?"}:
-            _send_telegram_message(chat_id, _next_lecture(chat_id))
-            return
-
-        # --- 3. BATCH LOOKUP ---
-        if not text_lower.startswith("/start") and text_lower != "start":
-            cursor.execute(
-                "SELECT id, name FROM batches WHERE LOWER(name) = LOWER(%s) ORDER BY id DESC LIMIT 1",
-                (text.removeprefix("/batch ").strip(),),
-            )
-            batch = cursor.fetchone()
-            if batch:
-                cursor.execute(
-                    """
-                    INSERT INTO telegram_subscriptions (chat_id, role, target_id)
-                    VALUES (%s, 'Student', %s)
-                    ON CONFLICT (chat_id) DO UPDATE SET role = 'Student',
-                        target_id = EXCLUDED.target_id, updated_at = NOW()
-                    """,
-                    (chat_id, batch["id"]),
-                )
-                cursor.execute("DELETE FROM telegram_handshakes WHERE chat_id = %s", (chat_id,))
+        if text.lower() in {"/start", "start"}:
+            if subscription and subscription["role"] == "Student" and not subscription["student_id"]:
+                cursor.execute("DELETE FROM telegram_subscriptions WHERE chat_id = %s", (chat_id,))
+                subscription = None
+            if subscription:
+                menu = STUDENT_MENU if subscription["role"] == "Student" else FACULTY_MENU
+                _send_telegram_message(chat_id, "You are already verified. Choose an option below.", menu)
+            else:
+                cursor.execute("""
+                    INSERT INTO telegram_handshakes (chat_id, requested_role)
+                    VALUES (%s, NULL)
+                    ON CONFLICT (chat_id) DO UPDATE SET requested_role = NULL
+                """, (chat_id,))
                 conn.commit()
-                
-                # Send success message and instantly remove the keyboard menu
                 _send_telegram_message(
                     chat_id,
-                    f"✅ Linked successfully to {batch['name']}.\n\nSend /next to get your next lecture.",
-                    reply_markup={"remove_keyboard": True}
+                    "Welcome to SmartSched Uni! 🎓\n\nAre you a student or faculty member?",
+                    ROLE_MENU,
                 )
-                return
-
-        # --- 4. THE FAILSAFE MENU ---
-        if text_lower.startswith("/start") or text_lower == "start":
-            cursor.execute("INSERT INTO telegram_handshakes (chat_id) VALUES (%s) ON CONFLICT DO NOTHING", (chat_id,))
-            msg_prefix = "Welcome to SmartSched Uni! 🎓\n\n"
-        else:
-            msg_prefix = "❌ I didn't recognize that command or batch name.\n\n"
-
-        # Pull all batches dynamically
-        cursor.execute("SELECT name FROM batches ORDER BY name ASC")
-        batches = cursor.fetchall()
-        conn.commit()
-
-        if not batches:
-            _send_telegram_message(chat_id, msg_prefix + "No batches are currently configured in the system. Please ask your administrator to add them.")
             return
 
-        # Generate the popup buttons!
-        keyboard = [[{"text": b["name"]}] for b in batches]
-        reply_markup = {
-            "keyboard": keyboard,
-            "resize_keyboard": True,
-            "one_time_keyboard": True,
-            "input_field_placeholder": "Tap your batch..."
-        }
+        if text.lower() == "/unlink":
+            cursor.execute("DELETE FROM telegram_subscriptions WHERE chat_id = %s", (chat_id,))
+            cursor.execute("DELETE FROM telegram_handshakes WHERE chat_id = %s", (chat_id,))
+            conn.commit()
+            _send_telegram_message(
+                chat_id,
+                "Your account was unlinked. Send /start to connect again.",
+                {"remove_keyboard": True},
+            )
+            return
 
-        _send_telegram_message(
-            chat_id,
-            msg_prefix + "Please tap your specific batch from the menu below to link your account:",
-            reply_markup=reply_markup
-        )
-        return
+        if subscription:
+            if subscription["role"] == "Student":
+                if text == "⏭️ Next Lecture":
+                    _send_telegram_message(chat_id, _next_lecture(chat_id), STUDENT_MENU)
+                elif text == "📅 Today's Classes":
+                    _send_telegram_message(
+                        chat_id,
+                        _get_today_schedule(subscription["target_id"], "Student"),
+                        STUDENT_MENU,
+                    )
+                elif text == "🗓️ Full Week":
+                    pdf, filename = _build_student_week_pdf(chat_id)
+                    if pdf:
+                        _send_telegram_document(
+                            chat_id,
+                            filename,
+                            pdf,
+                            "Your weekly timetable",
+                        )
+                    else:
+                        _send_telegram_message(
+                            chat_id,
+                            "No published timetable was found for your batch yet.",
+                            STUDENT_MENU,
+                        )
+                elif text == "👤 My Profile":
+                    _send_telegram_message(chat_id, _profile(chat_id), STUDENT_MENU)
+                else:
+                    _send_telegram_message(chat_id, "Please choose an option from the menu.", STUDENT_MENU)
+            else:
+                _send_telegram_message(chat_id, "Faculty flow is available from the Faculty menu.", FACULTY_MENU)
+            return
 
+        if text in {"🎓 Student", "Student"}:
+            cursor.execute("""
+                INSERT INTO telegram_handshakes (chat_id, requested_role)
+                VALUES (%s, 'Student')
+                ON CONFLICT (chat_id) DO UPDATE SET requested_role = 'Student'
+            """, (chat_id,))
+            conn.commit()
+            _send_telegram_message(
+                chat_id,
+                "Please enter your registered PRN number.",
+                {"remove_keyboard": True},
+            )
+            return
+
+        if text in {"👨‍🏫 Faculty", "Faculty"}:
+            cursor.execute("""
+                INSERT INTO telegram_handshakes (chat_id, requested_role)
+                VALUES (%s, 'Faculty')
+                ON CONFLICT (chat_id) DO UPDATE SET requested_role = 'Faculty'
+            """, (chat_id,))
+            conn.commit()
+            _send_telegram_message(chat_id, "Enter your Faculty ID and 4-digit PIN, for example: 12 8492")
+            return
+
+        requested_role = handshake["requested_role"] if handshake else None
+        if requested_role == "Student":
+            cursor.execute(
+                "SELECT id, name, batch_id FROM students WHERE UPPER(prn) = UPPER(%s)",
+                (text,),
+            )
+            student = cursor.fetchone()
+            if not student:
+                _send_telegram_message(chat_id, "❌ That PRN is wrong or is not registered. Please try again.")
+                return
+            cursor.execute("""
+                INSERT INTO telegram_subscriptions (chat_id, role, target_id, student_id)
+                VALUES (%s, 'Student', %s, %s)
+                ON CONFLICT (chat_id) DO UPDATE SET
+                    role = 'Student',
+                    target_id = EXCLUDED.target_id,
+                    student_id = EXCLUDED.student_id,
+                    updated_at = NOW()
+            """, (chat_id, student["batch_id"], student["id"]))
+            cursor.execute("DELETE FROM telegram_handshakes WHERE chat_id = %s", (chat_id,))
+            cursor.execute("SELECT name FROM batches WHERE id = %s", (student["batch_id"],))
+            batch = cursor.fetchone()
+            conn.commit()
+            _send_telegram_message(
+                chat_id,
+                f"Hi {student['name']}! 👋\nYour PRN has been verified and your account is linked to {batch['name']}.",
+                STUDENT_MENU,
+            )
+            return
+
+        if requested_role == "Faculty":
+            faculty_match = re.fullmatch(r"(\d+)\s+(\d{4})", text)
+            if not faculty_match:
+                _send_telegram_message(chat_id, "❌ Use this format: Faculty ID and 4-digit PIN, for example 12 8492.")
+                return
+            faculty_id, pin = faculty_match.groups()
+            cursor.execute(
+                "SELECT id, name FROM faculties WHERE id = %s AND security_pin = %s",
+                (int(faculty_id), pin),
+            )
+            faculty = cursor.fetchone()
+            if not faculty:
+                _send_telegram_message(chat_id, "❌ Faculty ID or security PIN is incorrect. Please try again.")
+                return
+            cursor.execute("""
+                INSERT INTO telegram_subscriptions (chat_id, role, target_id)
+                VALUES (%s, 'Faculty', %s)
+                ON CONFLICT (chat_id) DO UPDATE SET
+                    role = 'Faculty', target_id = EXCLUDED.target_id,
+                    student_id = NULL, updated_at = NOW()
+            """, (chat_id, faculty["id"]))
+            cursor.execute("DELETE FROM telegram_handshakes WHERE chat_id = %s", (chat_id,))
+            conn.commit()
+            _send_telegram_message(chat_id, f"Hi Prof. {faculty['name']}! 👋 Your account is verified.", FACULTY_MENU)
+            return
+
+        _send_telegram_message(chat_id, "Please send /start and select Student or Faculty.", ROLE_MENU)
     except Exception as exc:
         conn.rollback()
         print(f"TELEGRAM UPDATE ERROR chat_id={chat_id}: {exc}")
-        _send_telegram_message(chat_id, "I could not process that request. Please try again.")
+        _send_telegram_message(chat_id, "An error occurred while processing your request. Please try again.")
     finally:
         cursor.close()
         release_db_connection(conn)
+
 
 @app.post("/telegram/webhook")
 def telegram_webhook(
@@ -591,6 +1514,72 @@ def configure_telegram_webhook(
 # =========================================================
 # CRUD ENDPOINTS (Departments, Faculties, Rooms, Batches, Subjects, Expertise)
 # =========================================================
+
+@app.post("/batches/{batch_id}/students")
+def add_students_manually(batch_id: int, payload: StudentListCreate, user: dict = Depends(require_admin)):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        count = 0
+        for student in payload.students:
+            cursor.execute("""
+                INSERT INTO students (prn, name, batch_id) 
+                VALUES (%s, %s, %s) 
+                ON CONFLICT (prn) DO UPDATE SET name = EXCLUDED.name, batch_id = EXCLUDED.batch_id
+            """, (student.prn, student.name, batch_id))
+            count += 1
+        conn.commit()
+        return {"success": True, "count": count}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+@app.post("/batches/{batch_id}/students/import")
+async def import_students_csv(batch_id: int, file: UploadFile = File(...), user: dict = Depends(require_admin)):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Must be a valid CSV file")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        contents = await file.read()
+        decoded = contents.decode('utf-8-sig')
+        reader = csv.DictReader(io.StringIO(decoded))
+        
+        if not reader.fieldnames:
+            raise HTTPException(status_code=400, detail="CSV must contain a header row: prn,name")
+        headers = [h.lower().strip() for h in reader.fieldnames if h]
+        if 'prn' not in headers or 'name' not in headers:
+            raise HTTPException(status_code=400, detail="CSV must contain exact 'prn' and 'name' headers")
+
+        count = 0
+        for row in reader:
+            row_clean = {k.lower().strip(): v.strip() for k, v in row.items()}
+            prn = row_clean.get('prn')
+            name = row_clean.get('name')
+            
+            if prn and name:
+                cursor.execute("""
+                    INSERT INTO students (prn, name, batch_id) 
+                    VALUES (%s, %s, %s) 
+                    ON CONFLICT (prn) DO UPDATE SET name = EXCLUDED.name, batch_id = EXCLUDED.batch_id
+                """, (prn, name, batch_id))
+                count += 1
+        conn.commit()
+        return {"success": True, "count": count}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        print(f"STUDENT CSV IMPORT ERROR: {e}")
+        raise HTTPException(status_code=500, detail="Error importing CSV. Please check the file format and database.")
+    finally:
+        cursor.close()
+        release_db_connection(conn)
 
 
 @app.post("/login")
@@ -690,8 +1679,8 @@ def get_departments(user: dict = Depends(require_admin)):
 def add_faculty(faculty: FacultyCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO faculties (department_id, name, max_weekly_hours) VALUES (%s, %s, %s)", 
-                       (faculty.department_id, faculty.name, faculty.max_weekly_hours))
+        cursor.execute("INSERT INTO faculties (department_id, name, max_weekly_hours, security_pin) VALUES (%s, %s, %s, %s)",
+                       (faculty.department_id, faculty.name, faculty.max_weekly_hours, faculty.security_pin))
         conn.commit(); return {"success": True, "message": "Faculty added successfully"}
     except Exception as e:
         conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
@@ -701,7 +1690,13 @@ def add_faculty(faculty: FacultyCreate, user: dict = Depends(require_admin)):
 def get_faculties(user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
-        cursor.execute("SELECT f.id, f.name, f.max_weekly_hours, f.department_id, d.name AS department_name FROM faculties f JOIN departments d ON f.department_id = d.id ORDER BY f.id ASC")
+        cursor.execute("""
+            SELECT f.id, f.name, f.max_weekly_hours, f.security_pin,
+                   f.department_id, d.name AS department_name
+            FROM faculties f
+            JOIN departments d ON f.department_id = d.id
+            ORDER BY f.id ASC
+        """)
         faculties = cursor.fetchall()
         cursor.execute("SELECT fe.faculty_id, s.name AS subject_name, fe.competency_tier FROM faculty_expertise fe JOIN subjects s ON fe.subject_id = s.id")
         expertise = cursor.fetchall()
@@ -716,6 +1711,9 @@ def get_faculties(user: dict = Depends(require_admin)):
             faculty["primary_subjects"] = exp_map.get(fid, {}).get("primary", [])
             faculty["secondary_subjects"] = exp_map.get(fid, {}).get("secondary", [])
         return {"data": faculties}
+    except Exception as exc:
+        print(f"FACULTY FETCH ERROR: {exc}")
+        raise HTTPException(status_code=500, detail="Could not load faculty records")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.delete("/delete-faculty/{faculty_id}")
@@ -735,8 +1733,9 @@ def delete_faculty(faculty_id: int, user: dict = Depends(require_admin)):
 def edit_faculty(faculty_id: int, faculty: FacultyCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE faculties SET name = %s, max_weekly_hours = %s, department_id = %s WHERE id = %s RETURNING id", 
-                       (faculty.name, faculty.max_weekly_hours, faculty.department_id, faculty_id))
+        cursor.execute("""UPDATE faculties SET name = %s, max_weekly_hours = %s, department_id = %s,
+                        security_pin = COALESCE(%s, security_pin) WHERE id = %s RETURNING id""",
+                       (faculty.name, faculty.max_weekly_hours, faculty.department_id, faculty.security_pin, faculty_id))
         if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Faculty not found")
         conn.commit(); return {"success": True, "message": "Faculty updated successfully"}
     except Exception as e:
@@ -806,7 +1805,8 @@ def get_batches(department_id: int, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""
-            SELECT b.id, b.name, b.student_count, b.department_id, b.mentor_id, b.semester, f.name AS mentor_name
+            SELECT b.id, b.name, b.student_count, b.department_id, b.mentor_id,
+                   b.semester, f.name AS mentor_name
             FROM batches b LEFT JOIN faculties f ON b.mentor_id = f.id WHERE b.department_id = %s ORDER BY b.name ASC
         """, (department_id,))
         return {"data": cursor.fetchall()}
@@ -838,6 +1838,78 @@ def delete_batch(batch_id: int, user: dict = Depends(require_admin)):
         conn.rollback(); raise HTTPException(status_code=400, detail="Cannot delete. Used in Timetable.")
     except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
     finally: cursor.close(); release_db_connection(conn)
+
+
+@app.get("/batches/{batch_id}/students")
+def get_batch_students(batch_id: int, user: dict = Depends(require_admin)):
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, prn, name, batch_id FROM students WHERE batch_id=%s ORDER BY name", (batch_id,))
+        return {"success": True, "data": cursor.fetchall()}
+    finally:
+        cursor.close(); release_db_connection(conn)
+
+
+@app.delete("/batches/{batch_id}/students/{student_id}")
+def delete_batch_student(batch_id: int, student_id: int, user: dict = Depends(require_admin)):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "DELETE FROM students WHERE id = %s AND batch_id = %s RETURNING id",
+            (student_id, batch_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Student not found in this batch")
+        conn.commit()
+        return {"success": True, "message": "Student removed successfully"}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Could not remove student") from exc
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+
+@app.post("/batches/{batch_id}/students")
+def add_batch_students(batch_id: int, payload: StudentImport, user: dict = Depends(require_admin)):
+    if not payload.students:
+        raise HTTPException(status_code=400, detail="At least one student is required")
+    conn = get_db_connection(); cursor = conn.cursor()
+    try:
+        for student in payload.students:
+            if student.batch_id != batch_id:
+                raise HTTPException(status_code=400, detail="Student batch_id does not match URL")
+            cursor.execute("""INSERT INTO students (prn,name,batch_id) VALUES (%s,%s,%s)
+                ON CONFLICT (prn) DO UPDATE SET name=EXCLUDED.name,batch_id=EXCLUDED.batch_id""",
+                           (student.prn.strip(), student.name.strip(), batch_id))
+        conn.commit()
+        return {"success": True, "count": len(payload.students)}
+    except Exception:
+        conn.rollback(); raise
+    finally:
+        cursor.close(); release_db_connection(conn)
+
+
+@app.post("/batches/{batch_id}/students/import")
+async def import_batch_students(batch_id: int, file: UploadFile = File(...), user: dict = Depends(require_admin)):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Upload a .csv file")
+    try:
+        rows = list(csv.DictReader(io.StringIO((await file.read()).decode("utf-8-sig"))))
+        students = [StudentCreate(prn=(row.get("prn") or row.get("PRN") or "").strip(),
+                                   name=(row.get("name") or row.get("Name") or "").strip(),
+                                   batch_id=batch_id) for row in rows]
+        if any(not student.prn or not student.name for student in students):
+            raise ValueError("CSV must contain non-empty prn and name columns")
+        return add_batch_students(batch_id, StudentImport(students=students), user)
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="CSV must be UTF-8 encoded") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @app.post("/add-subject/")
 def add_subject(subject: SubjectCreate, user: dict = Depends(require_admin)):

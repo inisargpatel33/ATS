@@ -38,7 +38,9 @@ To run locally:
 1. Clone the repository and set up a virtual environment.
 2. Install dependencies via `pip install -r requirements.txt`.
 3. Configure your PostgreSQL database named `smartsched` and update the connection string.
-4. Run the server using `uvicorn main:app --reload --port 8000` and access `http://127.0.0.1:8000/`.
+4. Run the server using `uvicorn main:app --reload --port 8000` and access
+   `http://127.0.0.1:8000/`. If port 8000 is already in use, run
+   `uvicorn main:app --reload --port 8001` and use the matching URL.
 
 ## Telegram live communication
 
@@ -59,12 +61,17 @@ batch's targeted alerts.
 3. From an authenticated admin session, configure the webhook:
    `POST /telegram/configure-webhook` with
    `{"public_url":"https://your-public-api.example.com"}`.
-4. A student sends `/start`, then replies with the exact batch name (for example
-   `BCA-Sem3`). The backend stores the Telegram `chat_id` against that batch.
-   Faculty can link with `/faculty <faculty_id>`.
-5. Students can send `/next` (or “Where is my next lecture?”). Publishing a
-   timetable notifies only its affected batches, and moving a timetable slot
-   notifies only that slot's batch.
+4. Add student records through the batch administration page with a PRN and name,
+   or import a CSV containing `prn,name` columns. A student sends `/start`, selects
+   **Student**, and replies with the registered PRN. The bot verifies the PRN,
+   greets the student by name, and shows the student menu. An incorrect PRN is
+   rejected without creating a subscription. Faculty records can include a
+   four-digit `security_pin`; faculty members select **Faculty** and verify with
+   `Faculty ID PIN` such as `12 8492`.
+5. Verified students receive options for next lecture, today's classes, full week,
+   and profile. **Full Week** sends a PDF timetable containing the same schedule
+   fields shown in the timetable portal: day, time, subject, room, and faculty.
+   Faculty can view their schedule, report leave, and claim substitution bounties.
 
 Telegram must be able to reach the deployed HTTPS endpoint. For local testing,
 use an HTTPS tunnel such as ngrok or Cloudflare Tunnel. The webhook returns

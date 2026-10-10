@@ -21,8 +21,10 @@ window.apiFetch = async function (url, options = {}) {
   const token = localStorage.getItem("access_token");
 
   options.headers = options.headers || {};
-  options.headers["Content-Type"] =
-    options.headers["Content-Type"] || "application/json";
+  if (!(options.body instanceof FormData)) {
+    options.headers["Content-Type"] =
+      options.headers["Content-Type"] || "application/json";
+  }
 
   if (token) {
     const trimmedToken = token.trim();
