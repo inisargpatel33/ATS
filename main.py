@@ -2309,9 +2309,13 @@ def get_faculties(user: dict = Depends(require_admin)):
         cursor.execute("""
             SELECT f.id, f.name, f.max_weekly_hours,
                    f.department_id, d.name AS department_name,
-                   (f.security_pin_hash IS NOT NULL) AS has_security_pin
+                   (f.security_pin_hash IS NOT NULL) AS has_security_pin,
+                   COUNT(t.id) AS assigned_hours
             FROM faculties f
             JOIN departments d ON f.department_id = d.id
+            LEFT JOIN timetables t ON t.faculty_id = f.id
+            GROUP BY f.id, f.name, f.max_weekly_hours, f.department_id,
+                     d.name, f.security_pin_hash
             ORDER BY f.id ASC
         """)
         faculties = cursor.fetchall()

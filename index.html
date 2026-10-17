@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartSched Uni - AI Dashboard</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
@@ -221,7 +220,7 @@
             class="lg:col-span-5 relative w-full h-48 md:h-64 lg:h-full lg:aspect-square"
           >
             <img
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSjkUhZzEjkc4dFWpUM1XKdo5WYEcQklUF3qSiCMTMrGbgSqqhpORPhUStw2ibQdlmcRPPVdS4wtVk9YDyGFXR-bdHZJAxstHSTu3DRxWEKgZ-zXqrW6GI6rKEw-iulwstXptflfRG4n7bF6vEPo6K5vdYMa7DvvRHF1L5BLk2-ONcGL_GOuYWBwH2tcgQMMSgcxl-C7dpwRVFThPo_ccU6R3efn6HAs2Nbh0DD-c2xSjYP_EUMMgBdOMDdseTgggNtZpFFAXxQgru"
+              src="dash.png"
               alt="College Campus Doodle"
               class="w-full h-full object-contain"
             />
@@ -493,58 +492,6 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <section class="lg:col-span-2 space-y-4 md:space-y-6">
-            <div
-              class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-            >
-              <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-secondary"
-                  >bar_chart</span
-                >
-                <h3 class="font-headline-md text-xl md:text-2xl text-primary">
-                  Faculty Workload Distribution
-                </h3>
-              </div>
-
-              <!-- Filter Dropdown & Transfer Action Button -->
-              <div class="flex items-center gap-3 w-full sm:w-auto">
-                <div class="relative w-full sm:w-48">
-                  <select
-                    id="chartDeptFilter"
-                    class="w-full bg-white hand-drawn-border-sm p-2 text-label-md focus:outline-none appearance-none pr-8 cursor-pointer"
-                  >
-                    <option value="all">All Departments</option>
-                  </select>
-                  <span
-                    class="material-symbols-outlined absolute right-2 top-2 pointer-events-none text-on-surface-variant"
-                    >expand_more</span
-                  >
-                </div>
-
-                <!-- 🚀 NEW: Quick Transfer Button -->
-                <button
-                  onclick="window.location.href = 'faculty.html'"
-                  class="bg-primary text-white hand-drawn-border-sm px-3 py-2 rounded-lg hover:-translate-y-1 active:translate-y-0 transition-transform flex items-center justify-center gap-2 shadow-[2px_2px_0px_0px_#181919] active:shadow-none"
-                  title="Manage Faculty HR & Hours"
-                >
-                  <span class="material-symbols-outlined text-sm"
-                    >edit_square</span
-                  >
-                  <span class="text-xs font-bold font-label-md hidden sm:block"
-                    >Manage</span
-                  >
-                </button>
-              </div>
-            </div>
-            <div
-              class="bg-white hand-drawn-border-sm offset-shadow-sm p-4 md:p-6"
-            >
-              <div class="relative h-[300px] w-full">
-                <canvas id="facultyWorkloadChart"></canvas>
-              </div>
-            </div>
-          </section>
-
-          <section class="space-y-4 md:space-y-6">
             <div class="flex items-center gap-2">
               <span class="material-symbols-outlined text-secondary"
                 >auto_awesome</span
@@ -570,30 +517,9 @@
       const API_URL = window.location.origin.includes(":5500")
         ? "http://127.0.0.1:8000"
         : window.location.origin;
-      let workloadChart = null;
-      let globalFacultyLoadData = [];
-
       document.addEventListener("DOMContentLoaded", async () => {
         await fetchGlobalDashboardData();
-        await loadDepartmentsForChart();
       });
-
-      async function loadDepartmentsForChart() {
-        try {
-          // 🚀 FIX: Pointed this to the correct API endpoint!
-          const res = await apiFetch(`${API_URL}/get-departments/`);
-          const result = await res.json();
-
-          const filter = document.getElementById("chartDeptFilter");
-          if (result.data) {
-            result.data.forEach((dept) => {
-              filter.innerHTML += `<option value="${dept.id}">${escapeHtml(dept.name)}</option>`;
-            });
-          }
-        } catch (e) {
-          console.error("Failed to load departments for chart");
-        }
-      }
 
       async function fetchGlobalDashboardData() {
         try {
@@ -683,84 +609,11 @@
             document.getElementById("predRoomShortage").innerText =
               data.predictive.room_shortage;
 
-            // 4. Render Chart & Recommendations
-            globalFacultyLoadData = data.faculty_load;
-            renderChart(globalFacultyLoadData);
             renderRecommendations(data.recommendations);
           }
         } catch (e) {
           console.error("Dashboard error:", e);
         }
-      }
-
-      document
-        .getElementById("chartDeptFilter")
-        .addEventListener("change", (e) => {
-          const selectedDeptId = e.target.value;
-
-          if (selectedDeptId === "all") {
-            renderChart(globalFacultyLoadData); // Show all
-          } else {
-            // Filter data to only show professors in the selected department
-            const filteredData = globalFacultyLoadData.filter(
-              (f) => f.department_id === parseInt(selectedDeptId),
-            );
-            renderChart(filteredData);
-          }
-        });
-
-      function renderChart(facultyLoadData) {
-        const ctx = document
-          .getElementById("facultyWorkloadChart")
-          .getContext("2d");
-        const labels = facultyLoadData.map((f) =>
-          f.name.replace("Faculty_", "F"),
-        );
-        const assignedData = facultyLoadData.map((f) => f.assigned_hours);
-        const maxData = facultyLoadData.map((f) => f.max_weekly_hours);
-
-        if (workloadChart) workloadChart.destroy();
-        workloadChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: labels,
-            datasets: [
-              {
-                label: "Assigned Hours",
-                data: assignedData,
-                backgroundColor: "#181919",
-                borderRadius: 4,
-                barPercentage: 0.6,
-              },
-              {
-                label: "Contract Max",
-                data: maxData,
-                backgroundColor: "#e5e2e1",
-                borderRadius: 4,
-                barPercentage: 0.6,
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                position: "top",
-                labels: { font: { family: "Plus Jakarta Sans", size: 12 } },
-              },
-              tooltip: {
-                backgroundColor: "#181919",
-                titleFont: { family: "Bricolage Grotesque", size: 14 },
-                bodyFont: { family: "Plus Jakarta Sans", size: 13 },
-              },
-            },
-            scales: {
-              y: { beginAtZero: true, grid: { color: "#f1edec" } },
-              x: { grid: { display: false } },
-            },
-          },
-        });
       }
 
       function renderRecommendations(recommendations) {
