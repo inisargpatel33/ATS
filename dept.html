@@ -444,7 +444,7 @@
             deptTableBody.innerHTML += `
           <tr class="hover:bg-surface-container-lowest">
             <td class="py-4 px-4 font-label-md text-primary">${dept.id}</td>
-            <td class="py-4 px-4 text-on-surface-variant font-medium">${dept.name}</td>
+            <td class="py-4 px-4 text-on-surface-variant font-medium">${escapeHtml(dept.name)}</td>
             <td class="py-4 px-4 text-on-surface-variant text-center">${dept.years} year(s) / ${dept.years * 2} semesters</td>
             <td class="py-4 px-4 text-center">
               <button onclick="openEditDept(${dept.id}, ${JSON.stringify(dept.name).replace(/"/g, '&quot;')}, ${dept.years})" class="text-primary hover:bg-secondary-container p-1.5 rounded-md transition-colors" title="Edit department">

@@ -489,14 +489,9 @@
 
             facultyTableBody.innerHTML += `
         <tr class="hover:bg-surface-container-lowest transition-colors">
-          <td class="py-5 px-4 font-label-md text-primary font-bold">${fac.name}</td>
-          <td class="py-5 px-4">
-            <span class="inline-flex items-center gap-1 px-2 py-1 bg-secondary-container border border-primary rounded-md font-mono font-bold tracking-widest">
-              <span class="material-symbols-outlined text-[16px]">key</span>
-              ${fac.security_pin || "Not set"}
-            </span>
-          </td>
-          <td class="py-5 px-4 text-on-surface-variant">${fac.department_name}</td>
+          <td class="py-5 px-4 font-label-md text-primary font-bold">${escapeHtml(fac.name)}</td>
+          <td class="py-5 px-4 text-on-surface-variant">${fac.has_security_pin ? "Set" : "Not set"}</td>
+          <td class="py-5 px-4 text-on-surface-variant">${escapeHtml(fac.department_name)}</td>
           <td class="py-5 px-4 text-on-surface-variant">${fac.max_weekly_hours} hrs</td>
           <td class="py-5 px-4 max-w-xs flex-wrap">${expertiseHtml}</td>
           <td class="py-5 px-4 text-center">
@@ -505,7 +500,7 @@
                 <span class="material-symbols-outlined text-[20px]">psychology</span>
               </button>
               
-              <button onclick="openEditFacultyModal(${fac.id}, '${fac.name.replace(/'/g, "\\'")}', ${fac.max_weekly_hours}, '${fac.security_pin || ""}')" class="p-1.5 hover:bg-surface-container rounded-md transition-colors" title="Edit Faculty">
+              <button onclick="openEditFacultyModal(${fac.id}, '${fac.name.replace(/'/g, "\\'")}', ${fac.max_weekly_hours}, '')" class="p-1.5 hover:bg-surface-container rounded-md transition-colors" title="Edit Faculty">
                 <span class="material-symbols-outlined text-[20px]">edit</span>
               </button>
 
@@ -647,7 +642,7 @@
               // Create a distinct visual header for each department
               expertiseList.innerHTML += `
                     <div class="bg-surface-container-low p-2 mt-4 mb-2 font-bold text-primary rounded border border-surface-variant sticky top-0 z-10">
-                      ${dept.name} Subjects
+                      ${escapeHtml(dept.name)} Subjects
                     </div>
                   `;
 

@@ -103,9 +103,28 @@ CREATE TABLE IF NOT EXISTS timetables (
     batch_id INTEGER NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
     subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     faculty_id INTEGER NOT NULL REFERENCES faculties(id) ON DELETE CASCADE,
+    notes TEXT NOT NULL DEFAULT '',
     UNIQUE (day_of_week, timeslot, room_id),
     UNIQUE (day_of_week, timeslot, faculty_id),
     UNIQUE (day_of_week, timeslot, batch_id)
+);
+
+ALTER TABLE timetables ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS extra_features TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS faculty_leave (
+    id SERIAL PRIMARY KEY,
+    faculty_id INTEGER NOT NULL REFERENCES faculties(id) ON DELETE CASCADE,
+    leave_date DATE NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (faculty_id, leave_date, reason)
+);
+CREATE TABLE IF NOT EXISTS daily_substitutes (
+    id SERIAL PRIMARY KEY,
+    timetable_id INTEGER NOT NULL REFERENCES timetables(id) ON DELETE CASCADE,
+    substitute_faculty_id INTEGER NOT NULL REFERENCES faculties(id) ON DELETE CASCADE,
+    specific_date DATE NOT NULL,
+    UNIQUE (timetable_id, specific_date)
 );
 
 
@@ -156,6 +175,7 @@ CREATE TABLE IF NOT EXISTS students (
 );
 
 ALTER TABLE faculties ADD COLUMN IF NOT EXISTS security_pin VARCHAR(4);
+ALTER TABLE faculties ADD COLUMN IF NOT EXISTS security_pin_hash TEXT;
 ALTER TABLE telegram_subscriptions ADD COLUMN IF NOT EXISTS student_id INTEGER
     REFERENCES students(id) ON DELETE SET NULL;
 

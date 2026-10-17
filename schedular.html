@@ -588,7 +588,7 @@
           (`${API_URL}/get-departments/`);
           const result = await response.json();
           result.data.forEach((dept) => {
-            deptDropdown.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+            deptDropdown.innerHTML += `<option value="${dept.id}">${escapeHtml(dept.name)}</option>`;
           });
         } catch (err) {
           console.error("Failed to load departments");
@@ -606,7 +606,7 @@
             scopeSelect.innerHTML = `<option value="all">Entire Department</option>`;
             if (result.data && result.data.length > 0) {
               result.data.forEach((batch) => {
-                scopeSelect.innerHTML += `<option value="${batch.id}">${batch.name}</option>`;
+                scopeSelect.innerHTML += `<option value="${batch.id}">${escapeHtml(batch.name)}</option>`;
               });
             } else {
               scopeSelect.innerHTML = `<option value="" disabled selected>No batches in this department</option>`;

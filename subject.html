@@ -536,9 +536,9 @@
 
             const row = `
         <tr class="hover:bg-surface-container-lowest transition-colors">
-          <td class="py-4 px-4 font-label-md text-primary font-bold">${subject.name}</td>
+          <td class="py-4 px-4 font-label-md text-primary font-bold">${escapeHtml(subject.name)}</td>
           <td class="py-4 px-4 text-center font-bold text-primary">Sem ${subject.semester || 1}</td> <td class="py-4 px-4 text-center">
-            <span class="inline-flex px-3 py-1 rounded-full text-label-sm border ${typePillClass}">${subject.subject_type}</span>
+            <span class="inline-flex px-3 py-1 rounded-full text-label-sm border ${typePillClass}">${escapeHtml(subject.subject_type)}</span>
           </td>
           <td class="py-4 px-4 text-on-surface-variant text-center">${subject.required_sessions}</td>
           <td class="py-4 px-4 text-center">

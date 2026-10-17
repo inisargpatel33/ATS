@@ -3,4 +3,6 @@ venv/
 venvsource/
 __pycache__/
 .env
+.env.*
+!.env.example
 *.pyc

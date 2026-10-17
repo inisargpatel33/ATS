@@ -8,7 +8,7 @@ const GLOBAL_API_URL = window.location.origin.includes(":5500")
 // AUTHENTICATION GATEKEEPER
 // =========================================================
 if (!window.location.pathname.includes("login.html")) {
-  const token = localStorage.getItem("access_token");
+  const token = sessionStorage.getItem("access_token");
   if (!token) {
     window.location.href = "login.html";
   }
@@ -18,7 +18,7 @@ if (!window.location.pathname.includes("login.html")) {
 // SMART API FETCH (Automatically attaches the JWT Token)
 // =========================================================
 window.apiFetch = async function (url, options = {}) {
-  const token = localStorage.getItem("access_token");
+  const token = sessionStorage.getItem("access_token");
 
   options.headers = options.headers || {};
   if (!(options.body instanceof FormData)) {
@@ -30,7 +30,7 @@ window.apiFetch = async function (url, options = {}) {
     const trimmedToken = token.trim();
     options.headers["Authorization"] = `Bearer ${trimmedToken}`;
   } else {
-    console.warn("apiFetch: No access token found in localStorage.");
+    console.warn("apiFetch: No access token found in sessionStorage.");
   }
 
   try {
@@ -38,7 +38,7 @@ window.apiFetch = async function (url, options = {}) {
     if (response.status === 401) {
       console.warn("apiFetch: Unauthorized response from", url);
       alert("Session expired or unauthorized. Please log in again.");
-      localStorage.removeItem("access_token");
+      sessionStorage.removeItem("access_token");
       window.location.href = "login.html";
       return null;
     }
@@ -47,6 +47,15 @@ window.apiFetch = async function (url, options = {}) {
     console.error("Network Error:", error);
     throw error;
   }
+};
+
+window.escapeHtml = function (value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 };
 // =========================================================
 // DEPARTMENT SELECTOR LOGIC
@@ -63,7 +72,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const data = await res.json();
     globalSelect.innerHTML = "";
     data.data.forEach((dept) => {
-      globalSelect.innerHTML += `<option value="${dept.id}" data-years="${dept.years || 3}">${dept.name}</option>`;
+      const option = document.createElement("option");
+      option.value = String(dept.id);
+      option.dataset.years = String(dept.years || 3);
+      option.textContent = dept.name;
+      globalSelect.appendChild(option);
     });
 
     const savedDept = localStorage.getItem("activeDeptId");

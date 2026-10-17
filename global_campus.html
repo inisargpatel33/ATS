@@ -388,7 +388,7 @@
                   <div class="bg-error-container border-2 border-error rounded-xl p-4 flex flex-col shadow-sm relative overflow-hidden group">
                      <div class="absolute top-0 right-0 bg-error text-white px-2 py-1 text-[10px] font-bold rounded-bl-lg">OCCUPIED</div>
                      <span class="material-symbols-outlined text-error text-3xl mb-2 opacity-80">meeting_room</span>
-                     <h4 class="font-headline-md text-primary text-lg truncate" title="${room.name}">${room.name}</h4>
+                     <h4 class="font-headline-md text-primary text-lg truncate" title="${escapeHtml(room.name)}">${escapeHtml(room.name)}</h4>
                      <p class="font-label-sm text-error font-bold text-xs uppercase mb-2 truncate">${activeClass.subject}</p>
                      <div class="mt-auto space-y-1 bg-white/50 p-2 rounded border border-error/20">
                         <p class="font-label-sm text-primary text-xs truncate flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">school</span> ${activeClass.faculty}</p>
@@ -401,8 +401,8 @@
                   <div class="bg-tertiary-fixed border-2 border-[#668b3f] rounded-xl p-4 flex flex-col shadow-sm relative">
                      <div class="absolute top-0 right-0 bg-[#668b3f] text-white px-2 py-1 text-[10px] font-bold rounded-bl-lg">AVAILABLE</div>
                      <span class="material-symbols-outlined text-[#668b3f] text-3xl mb-2 opacity-80">door_open</span>
-                     <h4 class="font-headline-md text-primary text-lg truncate">${room.name}</h4>
-                     <p class="font-label-sm text-on-surface-variant text-xs mt-1">Capacity: ${room.capacity}</p>
+                     <h4 class="font-headline-md text-primary text-lg truncate">${escapeHtml(room.name)}</h4>
+                     <p class="font-label-sm text-on-surface-variant text-xs mt-1">Capacity: ${escapeHtml(room.capacity)}</p>
                      <div class="mt-auto pt-4">
                         <p class="font-label-sm text-[#4b6b2d] text-xs font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check_circle</span> Ready to use</p>
                      </div>

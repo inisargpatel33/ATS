@@ -586,8 +586,8 @@
           studentsList.innerHTML = result.data.map((student) => `
             <div class="flex items-center justify-between gap-3 border-2 border-surface-variant rounded-lg p-3">
               <div>
-                <div class="font-bold">${student.name}</div>
-                <div class="font-mono text-sm text-on-surface-variant">${student.prn}</div>
+                <div class="font-bold">${escapeHtml(student.name)}</div>
+                <div class="font-mono text-sm text-on-surface-variant">${escapeHtml(student.prn)}</div>
               </div>
               <button type="button" class="remove-student-btn text-error border-2 border-error rounded-lg px-2 py-1 text-sm font-bold" data-student-id="${student.id}">
                 Remove
@@ -598,7 +598,7 @@
             button.addEventListener("click", () => removeStudent(button.dataset.studentId));
           });
         } catch (error) {
-          studentsList.innerHTML = `<p class="text-error">${error.message}</p>`;
+          studentsList.innerHTML = `<p class="text-error">${escapeHtml(error.message)}</p>`;
         }
       }
 
@@ -648,7 +648,7 @@
           facSelects.forEach((sel) => {
             sel.innerHTML = '<option value="">-- Unassigned --</option>';
             deptFaculties.forEach((fac) => {
-              sel.innerHTML += `<option value="${fac.id}">${fac.name}</option>`;
+              sel.innerHTML += `<option value="${fac.id}">${escapeHtml(fac.name)}</option>`;
             });
           });
         } catch (err) {
@@ -780,7 +780,7 @@
             const batchCard = `
         <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col space-y-5 hover:-translate-y-1 transition-transform">
           <div class="flex justify-between items-start mb-2">
-            <h4 class="font-headline-md text-2xl text-primary">${batch.name}</h4>
+            <h4 class="font-headline-md text-2xl text-primary">${escapeHtml(batch.name)}</h4>
             <button onclick="openEditBatchModal(${batch.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Batch">
               <span class="material-symbols-outlined text-[20px]">edit</span>
             </button>

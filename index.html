@@ -587,7 +587,7 @@
           const filter = document.getElementById("chartDeptFilter");
           if (result.data) {
             result.data.forEach((dept) => {
-              filter.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+              filter.innerHTML += `<option value="${dept.id}">${escapeHtml(dept.name)}</option>`;
             });
           }
         } catch (e) {

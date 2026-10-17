@@ -13,8 +13,7 @@ import math
 import random
 from auth import create_access_token
 import bcrypt
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, PlainTextResponse
 from fastapi import BackgroundTasks, Header
 from datetime import datetime, timezone, timedelta
 from hmac import compare_digest
@@ -27,22 +26,22 @@ import io
 import sys
 import asyncio
 from uuid import uuid4
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, Request
+from starlette.staticfiles import StaticFiles
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-# ⚠️ FAKE DATABASE FOR ADMIN PASSWORD 
-# Generate the bcrypt hash directly using the modern bcrypt library
-HASHED_ADMIN_PASSWORD = bcrypt.hashpw(b"supersecret", bcrypt.gensalt())
-
-
 # IMPORT YOUR NEW CONFIG
 from settings import (
     DATABASE_URL,
     SECRET_KEY,
+    ADMIN_USERNAME,
+    ADMIN_PASSWORD_HASH,
+    ENABLE_NGROK,
+    ENVIRONMENT,
     ALLOWED_ORIGINS,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_WEBHOOK_SECRET,
@@ -53,11 +52,53 @@ from settings import (
 # =========================================================
 
 app = FastAPI(title="Timetable SaaS API")
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_IMPORT_ROWS = 5000
 
-from pyngrok import ngrok
+class PublicStaticFiles(StaticFiles):
+    """Serve only browser assets, never source, secrets, binaries, or hidden files."""
+
+    ALLOWED_SUFFIXES = {
+        ".html", ".js", ".css", ".png", ".jpg", ".jpeg", ".gif",
+        ".svg", ".ico", ".webp", ".woff", ".woff2", ".ttf",
+    }
+
+    async def get_response(self, path: str, scope):
+        parts = path.replace("\\", "/").split("/")
+        if (
+            not path
+            or any(not part or part in {".", ".."} or part.startswith(".") for part in parts)
+            or not any(path.lower().endswith(suffix) for suffix in self.ALLOWED_SUFFIXES)
+        ):
+            return PlainTextResponse("Not found", status_code=404)
+        return await super().get_response(path, scope)
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
+        "connect-src 'self'; frame-ancestors 'none'",
+    )
+    if ENVIRONMENT == "production":
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+    return response
 
 @app.on_event("startup")
 def auto_configure_ngrok_and_telegram():
+    if ENVIRONMENT == "production" or not ENABLE_NGROK:
+        print("ℹ️ Ngrok startup is disabled; configure a controlled HTTPS webhook explicitly.")
+        return
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_WEBHOOK_SECRET:
         print("⚠️ Skipping Telegram Webhook setup: Missing tokens in .env")
         return
@@ -81,6 +122,7 @@ def auto_configure_ngrok_and_telegram():
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
             pass
 
+        from pyngrok import ngrok
         if existing_tunnel:
             public_url = existing_tunnel["public_url"]
             print(f"\n✅ Reusing existing ngrok tunnel at: {public_url}")
@@ -192,7 +234,11 @@ def public_view_timetable(batch_id: int):
     finally: cursor.close(); release_db_connection(conn)
 
 @app.post("/faculty-leave/")
-def add_faculty_leave(payload: LeaveCreate, background_tasks: BackgroundTasks):
+def add_faculty_leave(
+    payload: LeaveCreate,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(require_admin),
+):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO faculty_leave (faculty_id, leave_date, reason) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING", (payload.faculty_id, payload.leave_date, payload.reason))
@@ -235,7 +281,7 @@ def assign_substitute(payload: SubCreate, background_tasks: BackgroundTasks, use
 # THE ULTIMATE CORS BYPASS (Serve HTML directly from Python)
 # =========================================================
 # This tells Python to serve your HTML files directly
-app.mount("/ui", StaticFiles(directory=".", html=True), name="ui")
+app.mount("/ui", PublicStaticFiles(directory=".", html=True), name="ui")
 
 @app.get("/")
 def root():
@@ -266,6 +312,26 @@ def ensure_schema_compatibility():
         conn = db_pool.getconn()
         cursor = conn.cursor()
         cursor.execute("ALTER TABLE faculties ADD COLUMN IF NOT EXISTS security_pin VARCHAR(4)")
+        cursor.execute("ALTER TABLE faculties ADD COLUMN IF NOT EXISTS security_pin_hash TEXT")
+        cursor.execute(
+            "SELECT id, security_pin FROM faculties "
+            "WHERE security_pin IS NOT NULL AND security_pin_hash IS NULL"
+        )
+        for faculty_row in cursor.fetchall():
+            cursor.execute(
+                "UPDATE faculties SET security_pin_hash = %s WHERE id = %s",
+                (
+                    bcrypt.hashpw(
+                        faculty_row["security_pin"].encode("utf-8"),
+                        bcrypt.gensalt(),
+                    ).decode("utf-8"),
+                    faculty_row["id"],
+                ),
+            )
+        cursor.execute(
+            "UPDATE faculties SET security_pin = NULL "
+            "WHERE security_pin_hash IS NOT NULL"
+        )
         cursor.execute("ALTER TABLE batches ADD COLUMN IF NOT EXISTS semester INTEGER")
         cursor.execute("ALTER TABLE departments ADD COLUMN IF NOT EXISTS years INTEGER NOT NULL DEFAULT 3")
         cursor.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS semester INTEGER NOT NULL DEFAULT 1")
@@ -369,6 +435,9 @@ def ensure_schema_compatibility():
         if conn:
             conn.rollback()
         print(f"❌ Database compatibility migration failed: {exc}")
+        raise RuntimeError(
+            "Database schema compatibility check failed; startup aborted."
+        ) from exc
     finally:
         if cursor:
             cursor.close()
@@ -433,7 +502,7 @@ def get_db_connection():
                 try: db_pool.putconn(conn, close=True)
                 except Exception: pass
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Database extraction failure: {str(e)}")
+            raise HTTPException(status_code=500, detail="Could not load the requested records.")
     raise HTTPException(status_code=500, detail="Could not obtain a stable database stream.")
 
 def release_db_connection(conn):
@@ -1242,8 +1311,10 @@ def _process_telegram_update_legacy(update: dict) -> None:
             faculty_match = re.match(r"^(\d+)\s+(\d{4})$", text)
             if faculty_match:
                 fac_id, pin = faculty_match.groups()
-                cursor.execute("SELECT id, name FROM faculties WHERE id = %s AND security_pin = %s", (int(fac_id), pin))
+                cursor.execute("SELECT id, name, security_pin_hash FROM faculties WHERE id = %s", (int(fac_id),))
                 faculty = cursor.fetchone()
+                if faculty and not bcrypt.checkpw(pin.encode("utf-8"), faculty["security_pin_hash"].encode("utf-8")):
+                    faculty = None
                 if faculty:
                     cursor.execute("INSERT INTO telegram_subscriptions (chat_id, role, target_id) VALUES (%s, 'Faculty', %s)", (chat_id, faculty["id"]))
                     conn.commit()
@@ -1909,14 +1980,12 @@ def _process_telegram_update(update: dict) -> None:
                 return
             pin = pin_values[0]
             normalized_input_name = sorted(part.casefold() for part in name_parts)
-            cursor.execute(
-                "SELECT id, name FROM faculties WHERE security_pin = %s",
-                (pin,),
-            )
+            cursor.execute("SELECT id, name, security_pin_hash FROM faculties WHERE security_pin_hash IS NOT NULL")
             faculty = next(
                 (
                     candidate
                     for candidate in cursor.fetchall()
+                    if bcrypt.checkpw(pin.encode("utf-8"), candidate["security_pin_hash"].encode("utf-8"))
                     if sorted(part.casefold() for part in candidate["name"].split())
                     == normalized_input_name
                 ),
@@ -2017,7 +2086,7 @@ def add_students_manually(batch_id: int, payload: StudentListCreate, user: dict 
         return {"success": True, "count": count}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not add students.")
     finally:
         cursor.close()
         release_db_connection(conn)
@@ -2077,22 +2146,22 @@ def login(credentials: LoginRequest):
         typed_password_bytes = credentials.password.encode('utf-8')
         
         # 2. Check password against the secure hash
-        is_password_correct = bcrypt.checkpw(typed_password_bytes, HASHED_ADMIN_PASSWORD)
-        print(f"Did the password match the hash? {is_password_correct}")
+        is_password_correct = bcrypt.checkpw(
+            typed_password_bytes,
+            ADMIN_PASSWORD_HASH.encode("utf-8"),
+        )
         
         # 3. Grant or Deny Access
-        if credentials.username == "admin" and is_password_correct:
-            print("✅ Login successful! Generating JWT token...")
+        if credentials.username == ADMIN_USERNAME and is_password_correct:
             token = create_access_token(data={"sub": 1, "role": "admin"})
             return {"access_token": token, "token_type": "bearer"}
         else:
-            print("❌ Login failed: Username or password mismatch.")
             raise HTTPException(status_code=401, detail="Incorrect username or password")
-            
-    except Exception as e:
-        # This will catch ANY hidden crashes and print them to your terminal
-        print(f"❌ SERVER CRASH DURING LOGIN: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+    except HTTPException:
+        raise
+    except (ValueError, TypeError) as e:
+        print(f"Login configuration or verification failed: {e}")
+        raise HTTPException(status_code=500, detail="Authentication service is temporarily unavailable.") from e
         
 # @app.post("/add-department/")
 # def add_department(dept: DeptCreate):
@@ -2122,7 +2191,7 @@ def add_department(dept: DeptCreate, user: dict = Depends(require_admin)):
     except errors.UniqueViolation:
         conn.rollback(); raise HTTPException(status_code=400, detail="Department already exists")
     except Exception as e:
-        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+        conn.rollback(); raise HTTPException(status_code=500, detail="Could not save the department.")
     finally: cursor.close(); release_db_connection(conn)
 
 
@@ -2179,7 +2248,7 @@ def update_department(dept_id: int, dept: DeptCreate, user: dict = Depends(requi
         conn.rollback()
         raise
     except Exception as e:
-        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+        conn.rollback(); raise HTTPException(status_code=500, detail="Could not save the department.")
     finally: cursor.close(); release_db_connection(conn)
 
 
@@ -2207,7 +2276,7 @@ def delete_department(dept_id: int, user: dict = Depends(require_admin)):
         if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Department not found")
         conn.commit(); return {"success": True, "message": "Department deleted"}
     except Exception as e:
-        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+        conn.rollback(); raise HTTPException(status_code=500, detail="Could not save the faculty record.")
     finally: cursor.close(); release_db_connection(conn)
 
 
@@ -2224,11 +2293,13 @@ def get_departments(user: dict = Depends(require_admin)):
 def add_faculty(faculty: FacultyCreate, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO faculties (department_id, name, max_weekly_hours, security_pin) VALUES (%s, %s, %s, %s)",
-                       (faculty.department_id, faculty.name, faculty.max_weekly_hours, faculty.security_pin))
+        cursor.execute("INSERT INTO faculties (department_id, name, max_weekly_hours, security_pin_hash) VALUES (%s, %s, %s, %s)",
+                       (faculty.department_id, faculty.name, faculty.max_weekly_hours,
+                        bcrypt.hashpw(faculty.security_pin.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+                        if faculty.security_pin else None))
         conn.commit(); return {"success": True, "message": "Faculty added successfully"}
     except Exception as e:
-        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+        conn.rollback(); raise HTTPException(status_code=500, detail="Could not update the faculty record.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/get-faculties/")
@@ -2236,8 +2307,9 @@ def get_faculties(user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""
-            SELECT f.id, f.name, f.max_weekly_hours, f.security_pin,
-                   f.department_id, d.name AS department_name
+            SELECT f.id, f.name, f.max_weekly_hours,
+                   f.department_id, d.name AS department_name,
+                   (f.security_pin_hash IS NOT NULL) AS has_security_pin
             FROM faculties f
             JOIN departments d ON f.department_id = d.id
             ORDER BY f.id ASC
@@ -2271,7 +2343,7 @@ def delete_faculty(faculty_id: int, user: dict = Depends(require_admin)):
     except errors.ForeignKeyViolation:
         conn.rollback(); raise HTTPException(status_code=400, detail="Cannot delete this Professor. Assigned to timetables.")
     except Exception as e:
-        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+        conn.rollback(); raise HTTPException(status_code=500, detail="Could not delete the faculty record.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.put("/edit-faculty/{faculty_id}")
@@ -2279,12 +2351,14 @@ def edit_faculty(faculty_id: int, faculty: FacultyCreate, user: dict = Depends(r
     conn = get_db_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""UPDATE faculties SET name = %s, max_weekly_hours = %s, department_id = %s,
-                        security_pin = COALESCE(%s, security_pin) WHERE id = %s RETURNING id""",
-                       (faculty.name, faculty.max_weekly_hours, faculty.department_id, faculty.security_pin, faculty_id))
+                        security_pin_hash = COALESCE(%s, security_pin_hash) WHERE id = %s RETURNING id""",
+                       (faculty.name, faculty.max_weekly_hours, faculty.department_id,
+                        bcrypt.hashpw(faculty.security_pin.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+                        if faculty.security_pin else None, faculty_id))
         if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Faculty not found")
         conn.commit(); return {"success": True, "message": "Faculty updated successfully"}
     except Exception as e:
-        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+        conn.rollback(); raise HTTPException(status_code=500, detail="Could not update the faculty record.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.post("/add-room/")
@@ -2297,7 +2371,7 @@ def add_room(room: RoomCreate, user: dict = Depends(require_admin)):
         """, (room.name, room.capacity, room.room_type, "Projector" in room.amenities, "AC" in room.amenities, 
               "Whiteboard" in room.amenities, "Computers" in room.amenities, room.extra_features, room.is_active))
         conn.commit(); return {"success": True, "message": "Room added successfully"}
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not save the room.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/get-rooms/")
@@ -2315,7 +2389,7 @@ def edit_room(room_id: int, room: RoomCreate, user: dict = Depends(require_admin
         """, (room.name, room.capacity, room.room_type, "Projector" in room.amenities, "AC" in room.amenities, "Whiteboard" in room.amenities, "Computers" in room.amenities, room.extra_features, room.is_active, room_id))
         if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Room not found")
         conn.commit(); return {"success": True, "message": "Room updated successfully"}
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not update the room.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.delete("/delete-room/{room_id}")
@@ -2327,7 +2401,7 @@ def delete_room(room_id: int, user: dict = Depends(require_admin)):
         conn.commit(); return {"success": True, "message": "Room deleted successfully"}
     except errors.ForeignKeyViolation:
         conn.rollback(); raise HTTPException(status_code=400, detail="Cannot delete this Room. Assigned to classes.")
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not delete the room.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.post("/add-batch/")
@@ -2340,7 +2414,7 @@ def add_batch(batch: BatchCreate, user: dict = Depends(require_admin)):
         conn.commit(); return {"success": True, "message": "Batch added successfully"}
     except errors.UniqueViolation:
         conn.rollback(); raise HTTPException(status_code=400, detail="A batch with this name already exists in this department.")
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not save the batch.")
     finally: cursor.close(); release_db_connection(conn)
     
     
@@ -2368,7 +2442,7 @@ def edit_batch(batch_id: int, batch: BatchCreate, user: dict = Depends(require_a
         conn.commit(); return {"success": True, "message": "Batch updated successfully"}
     except errors.UniqueViolation:
         conn.rollback(); raise HTTPException(status_code=400, detail="Another batch with this name already exists.")
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not update the batch.")
     finally: cursor.close(); release_db_connection(conn)
     
     
@@ -2381,7 +2455,7 @@ def delete_batch(batch_id: int, user: dict = Depends(require_admin)):
         conn.commit(); return {"success": True, "message": "Batch deleted successfully"}
     except errors.ForeignKeyViolation:
         conn.rollback(); raise HTTPException(status_code=400, detail="Cannot delete. Used in Timetable.")
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not save the subject.")
     finally: cursor.close(); release_db_connection(conn)
 
 
@@ -2444,11 +2518,25 @@ async def import_batch_students(batch_id: int, file: UploadFile = File(...), use
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Upload a .csv file")
     try:
-        rows = list(csv.DictReader(io.StringIO((await file.read()).decode("utf-8-sig"))))
+        contents = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(contents) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="CSV file must be 5 MB or smaller")
+        rows = list(csv.DictReader(io.StringIO(contents.decode("utf-8-sig"))))
+        if len(rows) > MAX_IMPORT_ROWS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"CSV cannot contain more than {MAX_IMPORT_ROWS} students",
+            )
         students = [StudentCreate(prn=(row.get("prn") or row.get("PRN") or "").strip(),
                                    name=(row.get("name") or row.get("Name") or "").strip(),
                                    batch_id=batch_id) for row in rows]
-        if any(not student.prn or not student.name for student in students):
+        if any(
+            not student.prn
+            or not student.name
+            or len(student.prn) > 100
+            or len(student.name) > 255
+            for student in students
+        ):
             raise ValueError("CSV must contain non-empty prn and name columns")
         return add_batch_students(batch_id, StudentImport(students=students), user)
     except UnicodeDecodeError as exc:
@@ -2498,7 +2586,7 @@ def add_subject(subject: SubjectCreate, user: dict = Depends(require_admin)):
             status_code=409,
             detail="This subject already exists for the selected department and semester",
         ) from exc
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not update the subject.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/get-subjects/{department_id}")
@@ -2562,7 +2650,7 @@ def edit_subject(subject_id: int, subject: SubjectCreate, user: dict = Depends(r
             status_code=409,
             detail="This subject already exists for the selected department and semester",
         ) from exc
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not save faculty expertise.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.delete("/delete-subject/{subject_id}")
@@ -2574,7 +2662,7 @@ def delete_subject(subject_id: int, user: dict = Depends(require_admin)):
         conn.commit(); return {"success": True, "message": "Subject deleted successfully"}
     except errors.ForeignKeyViolation:
         conn.rollback(); raise HTTPException(status_code=400, detail="Cannot delete. Scheduled in Timetable.")
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not delete the subject.")
     finally: cursor.close(); release_db_connection(conn)
     
     
@@ -2587,7 +2675,7 @@ def add_expertise(exp: ExpertiseCreate, user: dict = Depends(require_admin)):
             ON CONFLICT (faculty_id, subject_id) DO UPDATE SET competency_tier = EXCLUDED.competency_tier
         """, (exp.faculty_id, exp.subject_id, exp.competency_tier))
         conn.commit(); return {"success": True, "message": "Expertise added successfully"}
-    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e: conn.rollback(); raise HTTPException(status_code=500, detail="Could not save faculty expertise.")
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/get-expertise/{faculty_id}")
@@ -2625,8 +2713,11 @@ def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic
         if r['batch_id'] == batch_id:
             scheduled_counts[r['subject_id']] += 1
 
-    total_sched = sum(scheduled_counts.values())
-    missing = total_req - total_sched
+    # Only sessions up to the subject requirement count toward completion. This
+    # keeps stale/legacy over-scheduled records from producing a score above 100%.
+    total_sched = sum(min(s['required_sessions'], scheduled_counts[s['id']]) for s in subjects)
+    extra_sessions = sum(max(0, scheduled_counts[s['id']] - s['required_sessions']) for s in subjects)
+    missing = max(0, total_req - total_sched)
     comp_rate = int((total_sched / total_req) * 100) if total_req > 0 else 100
 
     missing_details = []
@@ -2645,60 +2736,124 @@ def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic
             if s['subject_type'] == 'Practical': missing_practical += missing_count
             else: missing_theory += missing_count
 
-            sub_facs = [f['id'] for f in faculties if (f['id'], s['id']) in exp_map]
+            sub_facs = sorted(
+                f['id'] for f in faculties if (f['id'], s['id']) in exp_map
+            )
+            req_type = "Laboratory" if s["subject_type"] == "Practical" else "Lecture Hall/Seminar Room"
 
-            cause = "Unknown"
-            if not sub_facs:
-                cause = "No faculty mapped with expertise."
-            else:
-                overloaded = True
-                for fid in sub_facs:
-                    if faculty_usage[fid] < fac_dict[fid]['max_weekly_hours']: overloaded = False
-                if overloaded:
-                    cause = "Faculty weekly workload limit reached."
+            # 1. ANALYZE THE BATCH'S FREE TIME
+            batch_free_slots = [(d, t) for d in DAYS for t in dynamic_slots if (d, t) not in batch_schedule]
+            total_free = len(batch_free_slots)
+
+            recs_found = 0
+
+            b_no_teacher = 0
+            b_max_hours = 0
+            b_teacher_busy = 0
+            b_no_room = 0
+            b_ai_skipped = 0
+
+            for t_key in batch_free_slots:
+                day, slot = t_key
+
+                # Bottleneck 1: No teacher exists
+                if not sub_facs:
+                    b_no_teacher += 1
+                    continue
+
+                # Bottleneck 2: Teacher exists, but has hit max working hours
+                teachers_with_hours = [fid for fid in sub_facs if faculty_usage[fid] < fac_dict[fid]['max_weekly_hours']]
+                if not teachers_with_hours:
+                    b_max_hours += 1
+                    continue
+
+                # Bottleneck 3: Teacher has hours, but is teaching another class right now
+                free_teachers = [fid for fid in teachers_with_hours if (fid, t_key) not in faculty_schedule]
+                if not free_teachers:
+                    b_teacher_busy += 1
+                    continue
+
+                # Bottleneck 4: Teacher and Students are free. Is a room free?
+                free_room = None
+                for r in sorted(rooms, key=lambda room: room["id"]):
+                    if r["room_type"] == "Laboratory" and req_type != "Laboratory": continue
+                    if r["room_type"] != "Laboratory" and req_type == "Laboratory": continue
+                    if (r['id'], t_key) not in room_schedule:
+                        free_room = r['id']
+                        break
+
+                if not free_room:
+                    b_no_room += 1
                 else:
-                    req_type = "Laboratory" if s["subject_type"] == "Practical" else "Lecture Hall/Seminar Room"
-                    valid_rooms = [r for r in rooms if r["room_type"] == req_type or (req_type=="Lecture Hall/Seminar Room" and r["room_type"]!="Laboratory")]
-                    if not valid_rooms: cause = f"No '{req_type}' available in department."
-                    else: cause = "Scheduling rules prevented allocation (No common free slots)."
+                    # Bottleneck 5: Everyone is free, but the AI skipped it for Subject Spacing
+                    b_ai_skipped += 1
+                    free_fac = free_teachers[0]
+                    smart_recommendations.append({
+                        "day": day, "time": slot, "room": room_dict[free_room]['name'],
+                        "faculty": fac_dict[free_fac]['name'], "subject": s['name'],
+                        "reason": "This time slot is completely free for the students, teacher, and room.",
+                        "impact": "Adds 1 missing session instantly.",
+                        "admin_warning": "Manually applying this may change the subject spacing in the timetable.",
+                        "why_not_auto_applied": "The engine selected another timetable balance. This is a valid alternative that was not chosen automatically.",
+                        "preserved_constraints": ["Students are free", "Teacher is free", "Room is free"],
+                        "ignored_constraints": ["The complete timetable is not rebuilt", "Subject spacing may change"],
+                        "faculty_id": free_fac, "room_id": free_room, "subject_id": s['id']
+                    })
+                    recs_found += 1
+
+            # 2. GENERATE THE ROOT CAUSE STORY FOR THE ADMIN
+            if total_free == 0:
+                detailed_cause = "<b>Student Schedule Full:</b> The students have absolutely no free time left. Their schedule is 100% full."
+                action = "You must remove another class to make room for this one."
+            elif b_no_teacher == total_free:
+                detailed_cause = "<b>Unassigned Subject:</b> No teacher is assigned to teach this subject."
+                action = "Go to the 'Faculty' tab and assign a teacher's expertise to this subject."
+            elif b_max_hours == total_free:
+                assigned_names = ", ".join([fac_dict[f]['name'] for f in sub_facs])
+                detailed_cause = f"<b>Teacher Overworked:</b> The assigned teacher(s) ({assigned_names}) have reached their maximum allowed weekly hours."
+                action = f"Edit {assigned_names} in the Faculty tab to increase their max hours, or assign a second teacher."
+            else:
+                # Build the dynamic bullet list
+                breakdown_bullets = []
+                if b_teacher_busy > 0:
+                    breakdown_bullets.append(f"• <b>{b_teacher_busy} slots:</b> The assigned teacher was busy teaching another batch.")
+                if b_no_room > 0:
+                    breakdown_bullets.append(f"• <b>{b_no_room} slots:</b> The teacher was free, but all {req_type}s were occupied.")
+                if b_max_hours > 0:
+                    breakdown_bullets.append(f"• <b>{b_max_hours} slots:</b> The teacher had already hit their maximum weekly hour limit.")
+                if b_ai_skipped > 0:
+                    breakdown_bullets.append(f"• <b>{b_ai_skipped} slots:</b> Everyone was free, but using these slots would force students to take this subject multiple times in one day or back-to-back.")
+
+                bullets_html = "<br>".join(breakdown_bullets)
+                detailed_cause = f"The students had <b>{total_free} free slots</b> left, but the AI could not use them because:<br>{bullets_html}"
+                action = "Review the breakdown above. If you want to force this class into the schedule (even if it means breaking daily limits), use the Smart Recommendations below."
+
+            # 3. UNIQUE CAUSES PER SESSION
+            session_breakdown = []
+            for session_number in range(1, missing_count + 1):
+                if session_number <= recs_found:
+                    s_cause = f"Blocked by Subject Spacing Rules. The AI found free slots (see Smart Recommendation #{session_number}), but using them would break the 'Daily Limit' or 'No Back-to-Back' rule for students."
+                else:
+                    # Give the admin the biggest remaining bottleneck
+                    if b_no_room > b_teacher_busy:
+                        s_cause = f"Room Shortage: No {req_type} is free when the teacher and students are free."
+                    elif b_teacher_busy > 0:
+                        s_cause = f"Faculty Clash: The teacher is busy teaching other classes when these students are free."
+                    elif b_max_hours > 0:
+                        s_cause = f"HR Limits: The teacher has maxed out their weekly working hours."
+                    else:
+                        s_cause = "Complex Overlap: Students, teachers, and rooms were never free at the exact same time."
+
+                session_breakdown.append({
+                    "session": session_number,
+                    "cause": s_cause,
+                    "action": action
+                })
 
             missing_details.append({
-                "subject": s['name'], "type": s['subject_type'], "missing": missing_count, "cause": cause
+                "subject": s['name'], "type": s['subject_type'], "missing": missing_count,
+                "cause": detailed_cause, "action": action, "session_breakdown": session_breakdown
             })
-
-            # Smart Recommendations
-            recs_found = 0
-            for day in DAYS:
-                for slot in dynamic_slots:
-                    if recs_found >= 5: break
-                    t_key = (day, slot)
-                    if t_key in batch_schedule: continue
-
-                    free_fac = None
-                    for fid in sub_facs:
-                        if (fid, t_key) not in faculty_schedule and faculty_usage[fid] < fac_dict[fid]['max_weekly_hours']:
-                            free_fac = fid
-                            break
-
-                    if free_fac:
-                        req_type = "Laboratory" if s["subject_type"] == "Practical" else "Lecture Hall/Seminar Room"
-                        free_room = None
-                        for r in rooms:
-                            if r["room_type"] == "Laboratory" and req_type != "Laboratory": continue
-                            if r["room_type"] != "Laboratory" and req_type == "Laboratory": continue
-                            if (r['id'], t_key) not in room_schedule:
-                                free_room = r['id']
-                                break
-
-                        if free_room:
-                            smart_recommendations.append({
-                                "day": day, "time": slot, "room": room_dict[free_room]['name'],
-                                "faculty": fac_dict[free_fac]['name'], "subject": s['name'], 
-                                "reason": "Faculty, Room, and Batch are all free.",
-                                # ---> THE FIX: EXPLICITLY SEND THE IDs SO THE FRONTEND CAN SAVE THE CLASS <---
-                                "faculty_id": free_fac, "room_id": free_room, "subject_id": s['id']
-                            })
-                            recs_found += 1
 
     opt_suggestions = []
     if comp_rate < 100:
@@ -2709,12 +2864,47 @@ def run_timtable_analysis(batch_id, records, subjects, faculties, rooms, dynamic
     else:
         opt_suggestions.append({"text": "Timetable is fully optimized. No further action needed.", "impact": "N/A"})
 
+    improve_to_100 = {
+        "available": missing > 0,
+        "title": "Improve timetable completion",
+        "message": (
+            "The engine will generate a new timetable from the beginning and try to place "
+            "all remaining required sessions. It will keep safety rules that prevent clashes."
+        ),
+        "ignored_constraints": [
+            "Teacher weekly-hour limit may be exceeded for the named teachers.",
+            "The same subject may appear more than once on one day or in back-to-back periods.",
+            "Practical sessions may be placed without requiring a consecutive pair.",
+        ],
+        "protected_constraints": [
+            "A teacher will not teach two classes at the same time.",
+            "A room will not host two classes at the same time.",
+            "A batch will not have two classes at the same time.",
+            "Room type and student capacity will still be checked.",
+        ],
+        "affected_subjects": [
+            {
+                "subject": item["subject"],
+                "missing": item["missing"],
+                "reason": item["cause"],
+            }
+            for item in missing_details
+        ],
+        "constraints": [
+            "allow_faculty_overload",
+            "relax_subject_spacing",
+            "relax_practical_blocks",
+        ],
+    }
+
     return {
         "total_req": total_req, "total_sched": total_sched, "total_missing": missing,
+        "extra_sessions": extra_sessions,
         "missing_theory": missing_theory, "missing_practical": missing_practical,
         "comp_rate": comp_rate, "free_slots": (5 * len(dynamic_slots)) - total_sched, "score": comp_rate,
         "missing_breakdown": missing_details, "smart_recommendations": smart_recommendations,
         "optimization_suggestions": opt_suggestions,
+        "improve_to_100": improve_to_100,
         "constraints": [
             {"name": "Faculty Double Booking", "status": "Passed"},
             {"name": "Room Double Booking", "status": "Passed"},
@@ -2861,7 +3051,8 @@ def generate_timetable(department_id: int, payload: GenerateRequest, user: dict 
 
             for fac_id, vars_list in fac_weekly.items():
                 max_hrs = next((f["max_weekly_hours"] for f in faculties if f["id"] == fac_id), 40)
-                if vars_list: model.Add(sum(vars_list) <= max_hrs)
+                if vars_list and "allow_faculty_overload" not in payload.constraints:
+                    model.Add(sum(vars_list) <= max_hrs)
 
             objective_terms = []
 
@@ -2892,7 +3083,7 @@ def generate_timetable(department_id: int, payload: GenerateRequest, user: dict 
                                             model.Add(var2 == 1).OnlyEnforceIf(block_var)
                             if day_block_vars: model.Add(sum(day_block_vars) <= 1)
                                                 
-                        if all_block_vars: 
+                        if all_block_vars and "relax_practical_blocks" not in payload.constraints:
                             model.Add(sum(all_block_vars) <= num_blocks)
                             for var in all_block_vars: objective_terms.append(var * 50000)
                         if sub_vars: 
@@ -2910,13 +3101,17 @@ def generate_timetable(department_id: int, payload: GenerateRequest, user: dict 
                             day_s_vars = []
                             for i in range(len(dynamic_slots)):
                                 day_s_vars.extend(batch_day_slot_sub.get((b_id, day, dynamic_slots[i], sub_id), []))
-                            if day_s_vars:
+                            if day_s_vars and "relax_subject_spacing" not in payload.constraints:
                                 model.Add(sum(day_s_vars) <= max_per_day)
 
                             for i in range(len(dynamic_slots) - 1):
                                 s1_vars = batch_day_slot_sub.get((b_id, day, dynamic_slots[i], sub_id), [])
                                 s2_vars = batch_day_slot_sub.get((b_id, day, dynamic_slots[i+1], sub_id), [])
-                                if s1_vars and s2_vars: model.Add(sum(s1_vars) + sum(s2_vars) <= 1)
+                                if (
+                                    s1_vars and s2_vars
+                                    and "relax_subject_spacing" not in payload.constraints
+                                ):
+                                    model.Add(sum(s1_vars) + sum(s2_vars) <= 1)
 
             for booking in existing_bookings:
                 d, t = booking["day_of_week"], booking["timeslot"]
@@ -2978,7 +3173,7 @@ def generate_timetable(department_id: int, payload: GenerateRequest, user: dict 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not load the timetable.")
     finally:
         cursor.close()
         release_db_connection(conn)
@@ -2997,6 +3192,66 @@ def save_timetable(
             
         # Extract unique batch IDs from data payload
         batch_ids = list(set(r.batch_id for r in payload.records))
+
+        # Enforce subject requirements at the publish boundary as well as in
+        # the generator. This prevents stale recommendations or manual edits
+        # from creating extra lectures that analysis cannot justify.
+        if len(batch_ids) == 1:
+            batch_filter = "= %s"
+            batch_params = (batch_ids[0],)
+        else:
+            batch_filter = "IN %s"
+            batch_params = (tuple(batch_ids),)
+        cursor.execute(
+            f"""
+            SELECT b.id AS batch_id, b.name AS batch_name, b.semester,
+                   s.id AS subject_id, s.name AS subject_name,
+                   s.required_sessions
+            FROM batches b
+            JOIN subjects s ON s.department_id = b.department_id
+                            AND s.semester = b.semester
+            WHERE b.id {batch_filter}
+            """,
+            batch_params,
+        )
+        requirements = {
+            (row["batch_id"], row["subject_id"]): row
+            for row in cursor.fetchall()
+        }
+        cursor.execute(
+            f"""
+            SELECT t.batch_id, t.subject_id, COUNT(*) AS session_count
+            FROM timetables t
+            WHERE t.batch_id {batch_filter}
+            GROUP BY t.batch_id, t.subject_id
+            """,
+            batch_params,
+        )
+        existing_counts = {
+            (row["batch_id"], row["subject_id"]): row["session_count"]
+            for row in cursor.fetchall()
+        }
+        supplied_counts = {}
+        for record in payload.records:
+            key = (record.batch_id, record.subject_id)
+            if key not in requirements:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Subject {record.subject_id} does not belong to batch {record.batch_id}.",
+                )
+            supplied_counts[key] = supplied_counts.get(key, 0) + 1
+        overages = [
+            f"{requirements[key]['subject_name']} in {requirements[key]['batch_name']} "
+            f"({count} supplied, {requirements[key]['required_sessions']} required)"
+            for key, count in supplied_counts.items()
+            if count > requirements[key]["required_sessions"]
+            and count > existing_counts.get(key, 0)
+        ]
+        if overages:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot publish more sessions than required: " + "; ".join(overages),
+            )
         
         # Bulletproof clearing for single vs multiple items to prevent PostgreSQL syntax crashes
         if len(batch_ids) == 1:
@@ -3016,10 +3271,16 @@ def save_timetable(
         background_tasks.add_task(_notify_published_batches, batch_ids)
         return {"success": True, "message": "Timetable securely published to database."}
         
+    except HTTPException as e:
+        conn.rollback()
+        raise e
     except Exception as e: 
         conn.rollback()
         print(f"DATABASE SAVE ERROR: {str(e)}") 
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Timetable could not be saved. No changes were published.",
+        ) from e
     finally: 
         cursor.close()
         release_db_connection(conn)
@@ -3028,6 +3289,8 @@ def save_timetable(
 def validate_timetable_swap(payload: SwapValidationRequest, user: dict = Depends(require_admin)):
     conn = get_db_connection(); cursor = conn.cursor()
     try:
+        cursor.execute("SELECT id FROM timetables WHERE batch_id = %s AND day_of_week = %s AND timeslot = %s", (payload.batch_id, payload.new_day, payload.new_timeslot))
+        if cursor.fetchone(): return {"valid": False, "message": "Conflict: This batch already has a class at this time."}
         cursor.execute("SELECT id FROM timetables WHERE faculty_id = %s AND day_of_week = %s AND timeslot = %s", (payload.faculty_id, payload.new_day, payload.new_timeslot))
         if cursor.fetchone(): return {"valid": False, "message": "Conflict: This Professor is already teaching another class at this time."}
         cursor.execute("SELECT id FROM timetables WHERE room_id = %s AND day_of_week = %s AND timeslot = %s", (payload.room_id, payload.new_day, payload.new_timeslot))
@@ -3046,7 +3309,7 @@ def update_timetable_slot(
         cursor.execute(
             """
             SELECT t.batch_id, t.subject_id, t.day_of_week, t.timeslot,
-                   s.name AS subject, r.name AS room
+                   t.faculty_id, t.room_id, s.name AS subject, r.name AS room
             FROM timetables t
             JOIN subjects s ON s.id = t.subject_id
             JOIN rooms r ON r.id = t.room_id
@@ -3057,6 +3320,35 @@ def update_timetable_slot(
         previous = cursor.fetchone()
         if not previous:
             raise HTTPException(status_code=404, detail="Timetable record not found")
+        cursor.execute(
+            """
+            SELECT 1
+            FROM timetables
+            WHERE id <> %s
+              AND day_of_week = %s
+              AND timeslot = %s
+              AND (
+                  batch_id = %s
+                  OR faculty_id = %s
+                  OR room_id = %s
+              )
+            LIMIT 1
+            """,
+            (
+                payload.record_id,
+                payload.new_day,
+                payload.new_timeslot,
+                previous["batch_id"],
+                previous["faculty_id"],
+                previous["room_id"],
+            ),
+        )
+        if cursor.fetchone():
+            conn.rollback()
+            return {
+                "success": False,
+                "message": "Database conflict: the room, faculty member, or batch is occupied at that time.",
+            }
         cursor.execute("UPDATE timetables SET day_of_week = %s, timeslot = %s WHERE id = %s", (payload.new_day, payload.new_timeslot, payload.record_id))
         conn.commit()
         background_tasks.add_task(
@@ -3072,8 +3364,13 @@ def update_timetable_slot(
         return {"success": True, "message": "Timetable updated permanently!"}
     except Exception as e:
         conn.rollback()
-        if "unique constraint" in str(e).lower(): return {"success": False, "message": "Database Conflict: Room or Faculty is occupied."}
-        return {"success": False, "message": str(e)}
+        if isinstance(e, errors.UniqueViolation):
+            return {
+                "success": False,
+                "message": "Database conflict: the room, faculty member, or batch is occupied at that time.",
+            }
+        print(f"TIMETABLE MOVE ERROR: {e}")
+        return {"success": False, "message": "The timetable move could not be saved."}
     finally: cursor.close(); release_db_connection(conn)
 
 @app.get("/view-timetable/")
@@ -3101,7 +3398,7 @@ def view_timetable(department_id: Optional[int] = None, batch_id: Optional[int] 
         cursor.execute(query, tuple(params))
         return {"success": True, "data": cursor.fetchall()}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not load the timetable.")
     finally: 
         cursor.close()
         release_db_connection(conn)
@@ -3153,7 +3450,7 @@ def analyze_published_timetable(batch_id: int, user: dict = Depends(require_admi
         analysis = run_timtable_analysis(batch_id, batch_records, subjects, faculties, rooms, dynamic_slots, exp_map, all_dept_records)
         return {"success": True, "analysis": analysis}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not analyze the timetable.")
     finally:
         cursor.close()
         release_db_connection(conn)

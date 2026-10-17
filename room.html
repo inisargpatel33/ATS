@@ -740,20 +740,20 @@
 
             // Adding the new Extra Features text!
             const extraFeaturesText = room.extra_features
-              ? `<p class="text-label-sm text-secondary mb-2">★ ${room.extra_features}</p>`
+              ? `<p class="text-label-sm text-secondary mb-2">★ ${escapeHtml(room.extra_features)}</p>`
               : "";
 
             const roomCard = `
         <article class="bg-white hand-drawn-border-sm offset-shadow-sm p-6 flex flex-col justify-between hover:-translate-y-1 transition-transform min-h-[220px]">
             <div>
                 <div class="flex justify-between items-start mb-2">
-                    <h4 class="font-headline-md text-xl text-primary leading-tight">${room.name}</h4>
+                    <h4 class="font-headline-md text-xl text-primary leading-tight">${escapeHtml(room.name)}</h4>
                     <button onclick="openEditModal(${room.id})" class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Edit Room">
                         <span class="material-symbols-outlined text-[20px]">edit</span>
                     </button>
                 </div> 
                 <hr class="border-t border-surface-variant my-2">
-                <p class="text-label-md text-on-surface-variant mb-2">${room.room_type}</p>
+                <p class="text-label-md text-on-surface-variant mb-2">${escapeHtml(room.room_type)}</p>
                 <p class="text-label-md text-on-surface-variant mb-2">Capacity: ${room.capacity}</p>
                 ${extraFeaturesText}
                 <div class="flex gap-4 mb-4 text-primary opacity-80">${amenitiesHtml}</div>

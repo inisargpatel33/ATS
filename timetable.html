@@ -370,9 +370,13 @@
               <div
                 class="bg-primary text-white hand-drawn-border-sm p-5 shadow-sm"
               >
-                <h3 class="font-headline-md text-xl mb-4">
-                  Optimization Strategy
+                <h3 class="font-headline-md text-xl mb-2">
+                  Improve to 100%
                 </h3>
+                <p class="text-sm text-white/80 mb-4">
+                  Review the changes first. The engine will never allow teacher,
+                  room, or batch double-booking.
+                </p>
                 <div id="analysisOptGrid" class="space-y-3"></div>
               </div>
             </div>
@@ -404,6 +408,43 @@
             rows="3"
             class="w-full bg-white border-2 border-primary rounded-lg p-3 text-body-md focus:ring-secondary-container focus:outline-none"
           ></textarea>
+        </div>
+
+        <div
+          id="improveTimetableModal"
+          class="fixed inset-0 z-[110] flex items-center justify-center bg-primary/40 backdrop-blur-sm opacity-0 hidden transition-opacity duration-300"
+        >
+          <div
+            id="improveTimetableModalContent"
+            class="bg-surface w-[92%] max-w-2xl max-h-[85vh] overflow-y-auto hand-drawn-border-sm offset-shadow-sm p-6 transform scale-95 transition-transform duration-300"
+          >
+            <h3 class="font-headline-md text-2xl text-primary mb-2">
+              Review before improving timetable
+            </h3>
+            <p id="improveTimetableSummary" class="text-sm text-on-surface-variant mb-4"></p>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="bg-error-container border border-error rounded-lg p-4">
+                <h4 class="font-bold text-error mb-2">Rules that may be relaxed</h4>
+                <ul id="improveIgnoredRules" class="text-sm text-error space-y-2 list-disc pl-5"></ul>
+              </div>
+              <div class="bg-tertiary-fixed border border-primary rounded-lg p-4">
+                <h4 class="font-bold text-primary mb-2">Rules that stay protected</h4>
+                <ul id="improveProtectedRules" class="text-sm text-primary space-y-2 list-disc pl-5"></ul>
+              </div>
+            </div>
+            <div class="mt-4 bg-white border border-outline-variant rounded-lg p-4">
+              <h4 class="font-bold text-primary mb-2">Subjects still missing</h4>
+              <div id="improveAffectedSubjects" class="text-sm text-on-surface-variant space-y-2"></div>
+            </div>
+            <p class="text-sm text-error mt-4">
+              This creates a new draft timetable. Your published timetable will not
+              change until you review and publish the draft.
+            </p>
+            <div class="flex justify-end gap-3 mt-5">
+              <button id="cancelImproveBtn" class="px-4 py-2 font-label-md text-primary hover:bg-surface-container rounded-md">Cancel</button>
+              <button id="confirmImproveBtn" class="bg-primary text-on-primary px-5 py-2 rounded-md font-label-md offset-shadow-sm">Generate improved draft</button>
+            </div>
+          </div>
         </div>
         <div class="flex justify-end gap-3">
           <button
@@ -489,6 +530,22 @@
       let currentAnalysisData = null;
 
       const dayMap = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5 };
+      let conflictSchedules = [];
+
+      function sameId(left, right) {
+        return Number(left) === Number(right);
+      }
+
+      function hasScheduleConflict(schedule, targetDay, targetTime, moving) {
+        return (
+          schedule.day_of_week === targetDay &&
+          schedule.timeslot === targetTime &&
+          !sameId(schedule.id, moving.id) &&
+          (sameId(schedule.batch_id, moving.batch_id) ||
+            sameId(schedule.faculty_id, moving.faculty_id) ||
+            sameId(schedule.room_id, moving.room_id))
+        );
+      }
 
       // --- CMD+K ---
       const commandPalette = document.getElementById("commandPalette");
@@ -600,10 +657,11 @@
             alert("Timetable deleted successfully.");
             setTimeout(() => window.location.reload(), 1000);
           } else {
-            alert("Error: " + result.message);
+            alert("Error: " + (result.detail || result.message || "The timetable could not be saved."));
           }
         } catch (e) {
-          alert("Error: Could not connect to server.");
+          alert("Error: Could not save the timetable. " + (e.message || "Please try again."));
+          allSchedules.pop();
         }
       };
 
@@ -797,6 +855,11 @@
           );
           const tableData = await tableRes.json();
           allSchedules = tableData.data;
+          const conflictRes = await apiFetch(`${API_URL}/view-timetable/`);
+          const conflictData = await conflictRes.json();
+          conflictSchedules = Array.isArray(conflictData.data)
+            ? conflictData.data
+            : allSchedules;
         } catch (err) {
           batchSelect.innerHTML = `<option value="" disabled selected>Error loading batches</option>`;
         }
@@ -868,7 +931,7 @@
         const sGrid = document.getElementById("analysisMetricsGrid");
         sGrid.innerHTML = `
             <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Required</p><p class="text-2xl text-primary font-bold">${data.total_req}</p></div>
-            <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Scheduled</p><p class="text-2xl text-primary font-bold">${data.total_sched}</p></div>
+            <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Scheduled</p><p class="text-2xl text-primary font-bold">${data.total_sched}</p>${data.extra_sessions ? `<p class="text-xs text-error mt-1">${data.extra_sessions} extra ignored</p>` : ""}</div>
             <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Missing</p><p class="text-2xl ${data.total_missing > 0 ? "text-error" : "text-primary"} font-bold">${data.total_missing}</p></div>
             <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Completion</p><p class="text-2xl ${data.comp_rate < 100 ? "text-[#b38000]" : "text-primary"} font-bold">${data.comp_rate}%</p></div>
             <div class="bg-white p-4 border-2 border-primary rounded-lg text-center"><p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Score</p><p class="text-2xl text-primary font-bold">${data.score}/100</p></div>
@@ -879,7 +942,7 @@
             : data.missing_breakdown
                 .map(
                   (m) =>
-                    `<div class="p-3 bg-error-container rounded-lg border border-error"><div class="flex justify-between items-center mb-1"><span class="font-label-md font-bold text-error">${m.subject}</span> <span class="text-xs bg-error text-white px-2 py-0.5 rounded-md">${m.missing} Missing</span></div><p class="text-sm text-error opacity-80 italic">Root Cause: ${m.cause}</p></div>`,
+                    `<div class="p-3 bg-error-container rounded-lg border border-error"><div class="flex justify-between items-center mb-1"><span class="font-label-md font-bold text-error">${m.subject}</span> <span class="text-xs bg-error text-white px-2 py-0.5 rounded-md">${m.missing} Missing</span></div><p class="text-sm text-error"><strong>Overall:</strong> ${m.cause}</p><p class="text-sm text-primary mt-2"><strong>Recommended next step:</strong> ${m.action || "Review the suggested alternatives or update the available teachers and rooms."}</p><div class="mt-3 pt-2 border-t border-error/30 space-y-2 text-xs text-error"><p class="font-bold">Why each session is missing</p>${(m.session_breakdown || []).map((session) => `<div><strong>Session ${session.session}:</strong> ${session.cause}<br><span class="text-primary"><strong>Action:</strong> ${session.action || m.action || "Review the available alternatives."}</span></div>`).join("")}</div></div>`,
                 )
                 .join("");
         document.getElementById("analysisConstraintsGrid").innerHTML =
@@ -895,17 +958,104 @@
             : data.smart_recommendations
                 .map(
                   (s, index) =>
-                    `<div id="rec-card-${index}" class="group relative p-3 border border-outline-variant rounded-lg bg-surface flex flex-col hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden cursor-pointer" onclick="applySmartRecommendation(${index})"><div class="flex justify-between font-bold text-sm text-primary mb-1"><span>${s.subject}</span><span>${s.day} @ ${s.time.split(" - ")[0]}</span></div><div class="flex justify-between text-xs text-on-surface-variant mb-2"><span>${s.faculty}</span><span>${s.room}</span></div><span class="text-[10px] bg-secondary-container text-secondary px-2 py-1 rounded self-start">${s.reason}</span><div class="absolute inset-0 bg-primary/95 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-[1px]"><span class="text-white font-label-md font-bold flex items-center gap-2"><span class="material-symbols-outlined text-xl text-[#FFE194]">auto_awesome</span> Click to Apply</span></div></div>`,
+                    `<div id="rec-card-${index}" class="group relative p-3 border border-outline-variant rounded-lg bg-surface flex flex-col hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden"><div class="flex justify-between font-bold text-sm text-primary mb-1"><span>${s.subject}</span><span>${s.day} @ ${s.time.split(" - ")[0]}</span></div><div class="flex justify-between text-xs text-on-surface-variant mb-2"><span>${s.faculty}</span><span>${s.room}</span></div><p class="text-sm text-primary"><strong>Why this was not selected automatically:</strong> ${s.why_not_auto_applied || "This slot is a manual alternative. The generator selected a different overall timetable balance."}</p><p class="text-sm text-primary mt-2"><strong>What happens if applied:</strong> ${s.impact || "One session will be added and the missing count will reduce by one."}</p><p class="text-xs text-error mt-1"><strong>Important:</strong> ${s.admin_warning || "This changes the timetable immediately."}</p><p class="text-xs text-on-surface-variant mt-2"><strong>We checked:</strong> The batch, teacher, and room are free at this time.</p><p class="text-xs text-error mt-1"><strong>What may change:</strong> Only this session will be added. The full timetable and other classes will not be rebuilt automatically.</p><button type="button" class="absolute inset-0 w-full bg-primary/95 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-200 backdrop-blur-[1px] cursor-pointer" onclick="event.stopPropagation(); applySmartRecommendation(${index})"><span class="text-white font-label-md font-bold flex items-center gap-2"><span class="material-symbols-outlined text-xl text-[#FFE194]">auto_awesome</span> Click to Apply</span></button></div>`,
                 )
                 .join("");
         document.getElementById("analysisOptGrid").innerHTML =
-          data.optimization_suggestions
-            .map(
-              (o) =>
-                `<div class="p-3 bg-surface text-primary rounded-lg border border-outline-variant flex items-center justify-between"><span class="text-sm font-label-md">${o.text}</span><span class="text-xs font-bold text-tertiary-container bg-tertiary-fixed px-2 py-1 rounded-md border border-tertiary-container">${o.impact}</span></div>`,
-            )
-            .join("");
+          data.total_missing > 0
+            ? `<button type="button" class="w-full bg-secondary-container text-primary rounded-lg border-2 border-primary p-4 text-left hover:-translate-y-0.5 transition-transform" onclick="openImproveTimetableModal()"><span class="font-bold">Review changes to improve completion</span><span class="block text-sm mt-1">${data.smart_recommendations.length ? "Smart Recommendations are available above. You can also rebuild the timetable to try to place all remaining sessions." : "No safe one-click slot is available. Review what may be relaxed before creating a new draft."}</span><span class="block text-xs font-bold mt-3">Open review</span></button>`
+            : `<div class="p-4 bg-surface text-primary rounded-lg border border-outline-variant"><span class="text-sm font-label-md">${data.total_missing === 0 ? "All required sessions are scheduled. No improvement is needed." : "Apply the available recommendations above, or update teacher, room, and batch availability before trying again."}</span></div>`;
       }
+
+      function closeImproveTimetableModal() {
+        const modal = document.getElementById("improveTimetableModal");
+        const content = document.getElementById("improveTimetableModalContent");
+        modal.classList.add("opacity-0");
+        content.classList.add("scale-95");
+        setTimeout(() => modal.classList.add("hidden"), 300);
+      }
+
+      window.openImproveTimetableModal = function () {
+        const plan = currentAnalysisData && currentAnalysisData.improve_to_100;
+        if (!currentAnalysisData || currentAnalysisData.total_missing <= 0) return;
+        const reviewPlan = plan || {
+          message: "The engine will create a new draft and try to place the remaining required sessions.",
+          ignored_constraints: [
+            "Teacher weekly-hour limit may be exceeded.",
+            "The same subject may be placed more than once in a day or in back-to-back periods.",
+            "Practical sessions may be placed without requiring a consecutive pair.",
+          ],
+          protected_constraints: [
+            "Teachers, rooms, and batches will not be double-booked.",
+            "Room type and student capacity will still be checked.",
+          ],
+          affected_subjects: currentAnalysisData.missing_breakdown.map((item) => ({
+            subject: item.subject,
+            missing: item.missing,
+          })),
+          constraints: ["allow_faculty_overload", "relax_subject_spacing", "relax_practical_blocks"],
+        };
+        document.getElementById("improveTimetableSummary").textContent = reviewPlan.message;
+        document.getElementById("improveIgnoredRules").innerHTML =
+          reviewPlan.ignored_constraints.map((rule) => `<li>${rule}</li>`).join("");
+        document.getElementById("improveProtectedRules").innerHTML =
+          reviewPlan.protected_constraints.map((rule) => `<li>${rule}</li>`).join("");
+        document.getElementById("improveAffectedSubjects").innerHTML =
+          reviewPlan.affected_subjects
+            .map((item) => `<p><strong>${item.subject}</strong> — ${item.missing} missing session(s).</p>`)
+            .join("");
+        document.getElementById("confirmImproveBtn").dataset.constraints =
+          JSON.stringify(reviewPlan.constraints);
+        const modal = document.getElementById("improveTimetableModal");
+        const content = document.getElementById("improveTimetableModalContent");
+        modal.classList.remove("hidden");
+        setTimeout(() => {
+          modal.classList.remove("opacity-0");
+          content.classList.remove("scale-95");
+        }, 10);
+      };
+
+      document.getElementById("cancelImproveBtn").addEventListener("click", closeImproveTimetableModal);
+      document.getElementById("improveTimetableModal").addEventListener("click", (event) => {
+        if (event.target.id === "improveTimetableModal") closeImproveTimetableModal();
+      });
+      document.getElementById("confirmImproveBtn").addEventListener("click", async function () {
+        const batchSelect = document.getElementById("batchSelectFilter");
+        if (!currentAnalysisData || currentAnalysisData.total_missing <= 0 || !batchSelect || !batchSelect.value) return;
+        const constraints = JSON.parse(this.dataset.constraints || JSON.stringify([
+          "allow_faculty_overload",
+          "relax_subject_spacing",
+          "relax_practical_blocks",
+        ]));
+        const batchId = batchSelect.value;
+        this.disabled = true;
+        this.textContent = "Generating draft...";
+        try {
+          const response = await apiFetch(`${API_URL}/generate-timetable/${CURRENT_DEPT_ID}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              constraints: constraints,
+              batch_id: batchId,
+              start_hour: 8,
+              end_hour: 16,
+              break_hour: 12,
+            }),
+          });
+          const result = await response.json();
+          if (!response.ok || !result.success) {
+            throw new Error(result.detail || result.message || "The engine could not create an improved draft.");
+          }
+          sessionStorage.setItem("draftOptions", JSON.stringify(result.draft_options));
+          sessionStorage.setItem("draftBatchId", batchId);
+          sessionStorage.setItem("draftDeptId", CURRENT_DEPT_ID);
+          window.location.href = "timetable.html?draft=true";
+        } catch (error) {
+          alert(error.message);
+          this.disabled = false;
+          this.textContent = "Generate improved draft";
+        }
+      });
 
       function renderGrid(batchName) {
         const gridContainer = document.getElementById("gridContainer");
@@ -914,7 +1064,7 @@
         );
 
         if (batchSchedules.length === 0) {
-          gridContainer.innerHTML = `<div class="flex flex-col items-center justify-center p-16 text-error w-full h-full mt-10"><span class="material-symbols-outlined text-[64px] mb-4 opacity-50">warning</span><h3 class="font-display-lg text-2xl text-primary">No Classes Scheduled</h3><p class="font-label-md mt-2 text-on-surface-variant max-w-md text-center">The AI could not schedule any classes for <strong>${batchName}</strong> under these strict constraints. <br><br>Click the <strong>'View Analysis'</strong> button in the top right to see exactly which rules or room limits prevented allocation.</p></div>`;
+          gridContainer.innerHTML = `<div class="flex flex-col items-center justify-center p-16 text-error w-full h-full mt-10"><span class="material-symbols-outlined text-[64px] mb-4 opacity-50">warning</span><h3 class="font-display-lg text-2xl text-primary">No Classes Scheduled</h3><p class="font-label-md mt-2 text-on-surface-variant max-w-md text-center">The AI could not schedule any classes for <strong>${escapeHtml(batchName)}</strong> under these strict constraints. <br><br>Click the <strong>'View Analysis'</strong> button in the top right to see exactly which rules or room limits prevented allocation.</p></div>`;
           document
             .getElementById("savedTimetableActionBar")
             .classList.add("hidden");
@@ -976,7 +1126,7 @@
               const bgColor = classData.room.includes("ROOM")
                 ? "bg-tertiary-fixed"
                 : "bg-[#FFE194]";
-              rowHtml += `<div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200" data-day="${dayStr}" data-time="${slot}" ondragover="handleDragOver(event)" ondrop="handleDrop(event, '${dayStr}', '${slot}')"><div class="schedule-card ${bgColor} flex flex-col justify-between cursor-move" draggable="true" ondragstart="handleDragStart(event, ${classData.batch_id}, ${classData.faculty_id}, ${classData.room_id}, '${dayStr}', '${slot}')" id="card_${classData.id}"><p class="font-label-md text-primary mb-1 leading-tight">${classData.subject}</p><div class="flex justify-between items-end mt-auto pt-2"><p class="text-label-sm text-on-surface-variant bg-white/50 px-1.5 rounded-md border border-primary/20"><span class="material-symbols-outlined text-[12px] align-middle">meeting_room</span> ${classData.room.replace("Room_", "")}</p><p class="text-label-sm text-primary font-bold">${classData.faculty.replace("Prof_", "")}</p></div></div></div>`;
+              rowHtml += `<div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200" data-day="${dayStr}" data-time="${slot}" ondragover="handleDragOver(event)" ondrop="handleDrop(event, '${dayStr}', '${slot}')"><div class="schedule-card ${bgColor} flex flex-col justify-between cursor-move" draggable="true" ondragstart="handleDragStart(event, ${classData.batch_id}, ${classData.faculty_id}, ${classData.room_id}, '${dayStr}', '${slot}', event.currentTarget)" id="card_${classData.id}"><p class="font-label-md text-primary mb-1 leading-tight">${classData.subject}</p><div class="flex justify-between items-end mt-auto pt-2"><p class="text-label-sm text-on-surface-variant bg-white/50 px-1.5 rounded-md border border-primary/20"><span class="material-symbols-outlined text-[12px] align-middle">meeting_room</span> ${classData.room.replace("Room_", "")}</p><p class="text-label-sm text-primary font-bold">${classData.faculty.replace("Prof_", "")}</p></div></div></div>`;
             } else {
               rowHtml += `<div class="border-r-2 border-surface-variant border-dashed p-1 drop-zone transition-colors duration-200" data-day="${dayStr}" data-time="${slot}" ondragover="handleDragOver(event)" ondrop="handleDrop(event, '${dayStr}', '${slot}')"></div>`;
             }
@@ -988,6 +1138,7 @@
 
       function handleDragOver(event) {
         event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
       }
       function handleDragStart(
         event,
@@ -996,6 +1147,7 @@
         room_id,
         currentDay,
         currentTime,
+        cardElement,
       ) {
         draggedItemData = {
           batch_id,
@@ -1003,18 +1155,27 @@
           room_id,
           currentDay,
           currentTime,
+          recordId: draggedHtmlElement?.id?.replace("card_", ""),
         };
-        draggedHtmlElement = event.target;
-        event.target.classList.add("opacity-50", "scale-95", "shadow-xl");
+        draggedHtmlElement = cardElement || event.currentTarget;
+        if (!draggedHtmlElement || !draggedHtmlElement.id) return;
+        draggedItemData.recordId = draggedHtmlElement.id.replace("card_", "");
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", draggedHtmlElement.id);
+        }
+        draggedHtmlElement.classList.add("opacity-50", "scale-95", "shadow-xl");
         document.querySelectorAll(".drop-zone").forEach((zone) => {
           const zoneDay = zone.getAttribute("data-day");
           const zoneTime = zone.getAttribute("data-time");
           if (zoneDay === currentDay && zoneTime === currentTime) return;
-          const isConflict = allSchedules.some(
-            (s) =>
-              s.day_of_week === zoneDay &&
-              s.timeslot === zoneTime &&
-              (s.faculty_id === faculty_id || s.room_id === room_id),
+          const isConflict = conflictSchedules.some((s) =>
+            hasScheduleConflict(s, zoneDay, zoneTime, {
+              id: draggedItemData.recordId,
+              batch_id,
+              faculty_id,
+              room_id,
+            }),
           );
           if (isConflict) {
             zone.classList.add(
@@ -1062,21 +1223,44 @@
         let dropZone = event.target.closest(".drop-zone");
         if (!dropZone) return;
         if (dropZone.getAttribute("data-conflict") === "true") {
-          alert("Conflict! Professor or Room is busy at this time.");
+          alert("Conflict! The batch, professor, or room is busy at this time.");
           return;
         }
-        const recordId = draggedHtmlElement.id.split("_")[1];
+        const recordId = Number(draggedHtmlElement.id.split("_")[1]);
+        if (!Number.isInteger(recordId)) {
+          alert("This timetable item could not be identified. Please refresh and try again.");
+          return;
+        }
+        if (
+          draggedItemData &&
+          draggedItemData.currentDay === newDay &&
+          draggedItemData.currentTime === newTimeSlot
+        ) {
+          return;
+        }
+
+        const recordToUpdate = allSchedules.find((s) =>
+          sameId(s.id, recordId),
+        );
+        const targetConflict =
+          !recordToUpdate ||
+          conflictSchedules.some((s) =>
+            hasScheduleConflict(s, newDay, newTimeSlot, recordToUpdate),
+          );
+        if (targetConflict) {
+          alert("Conflict! The batch, professor, or room is busy at this time.");
+          return;
+        }
 
         if (!isDraftMode) {
           try {
-            draggedHtmlElement.style.opacity = "0.5";
             const response = await apiFetch(
               `${API_URL}/update-timetable-slot/`,
               {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  record_id: parseInt(recordId),
+                  record_id: recordId,
                   new_day: newDay,
                   new_timeslot: newTimeSlot,
                 }),
@@ -1084,24 +1268,73 @@
             );
             const result = await response.json();
             if (!response.ok || result.success === false) {
-              alert("Error: " + (result.detail || result.message));
-              draggedHtmlElement.style.opacity = "1";
+              alert("Error: " + (result.detail || result.message || "The timetable move could not be saved."));
+              await refreshTimetableData();
               return;
             }
           } catch (e) {
-            alert("Network error.");
-            draggedHtmlElement.style.opacity = "1";
+            alert("Network error. The timetable was not changed.");
+            await refreshTimetableData();
             return;
           }
         }
 
-        dropZone.appendChild(draggedHtmlElement);
-        draggedHtmlElement.style.opacity = "1";
-        const recordToUpdate = allSchedules.find((s) => s.id == recordId);
+        async function refreshTimetableData() {
+          if (isDraftMode || !CURRENT_DEPT_ID) return;
+          try {
+            const response = await apiFetch(
+              `${API_URL}/view-timetable/?department_id=${CURRENT_DEPT_ID}`,
+            );
+            if (!response || !response.ok) return;
+            const result = await response.json();
+            if (!result.success || !Array.isArray(result.data)) return;
+            allSchedules = result.data;
+            const conflictResponse = await apiFetch(
+              `${API_URL}/view-timetable/`,
+            );
+            if (conflictResponse && conflictResponse.ok) {
+              const conflictResult = await conflictResponse.json();
+              if (conflictResult.success && Array.isArray(conflictResult.data)) {
+                conflictSchedules = conflictResult.data;
+              }
+            }
+            const select = document.getElementById("batchSelectFilter");
+            if (select && select.selectedIndex > 0) {
+              const batchName =
+                select.options[select.selectedIndex].getAttribute(
+                  "data-batchname",
+                );
+              renderGrid(batchName);
+            }
+          } catch (error) {
+            console.error("Could not refresh timetable after failed move:", error);
+          }
+        }
+
         if (recordToUpdate) {
           recordToUpdate.day_of_week = newDay;
           recordToUpdate.timeslot = newTimeSlot;
         }
+        const conflictRecord = conflictSchedules.find((s) =>
+          sameId(s.id, recordId),
+        );
+        if (conflictRecord) {
+          conflictRecord.day_of_week = newDay;
+          conflictRecord.timeslot = newTimeSlot;
+        }
+        if (isDraftMode) {
+          const draftOptions = JSON.parse(sessionStorage.getItem("draftOptions"));
+          draftOptions[window.currentlySelectedDraftIndex || 0].records =
+            allSchedules;
+          sessionStorage.setItem("draftOptions", JSON.stringify(draftOptions));
+        }
+        const selectedBatch = document.getElementById("batchSelectFilter");
+        const batchName =
+          selectedBatch.options[selectedBatch.selectedIndex].getAttribute(
+            "data-batchname",
+          );
+        renderGrid(batchName);
+        const movedCard = document.getElementById(`card_${recordId}`);
 
         // =========================================================
         // REAL-TIME CLEANUP (DRAG AND DROP)
@@ -1132,11 +1365,15 @@
           renderAnalysisUI();
         }
 
-        draggedHtmlElement.classList.add("ring-4", "ring-green-500");
-        setTimeout(
-          () => draggedHtmlElement.classList.remove("ring-4", "ring-green-500"),
-          1000,
-        );
+        if (movedCard) {
+          movedCard.classList.add("ring-4", "ring-green-500");
+          setTimeout(
+            () => movedCard.classList.remove("ring-4", "ring-green-500"),
+            1000,
+          );
+        }
+        draggedHtmlElement = null;
+        draggedItemData = null;
       }
 
       // =========================================================
@@ -1145,6 +1382,19 @@
       window.applySmartRecommendation = async function (index) {
         if (!currentAnalysisData) return;
         const rec = currentAnalysisData.smart_recommendations[index];
+        if (!rec || rec._applying) return;
+        const missingItemBeforeApply = currentAnalysisData.missing_breakdown.find(
+          (m) => m.subject === rec.subject,
+        );
+        if (!missingItemBeforeApply || missingItemBeforeApply.missing <= 0) {
+          currentAnalysisData.smart_recommendations =
+            currentAnalysisData.smart_recommendations.filter(
+              (r) => r.subject !== rec.subject,
+            );
+          renderAnalysisUI();
+          return;
+        }
+        rec._applying = true;
         const select = document.getElementById("batchSelectFilter");
         const batchId = parseInt(select.value);
         const batchName =
@@ -1171,6 +1421,8 @@
         currentAnalysisData.smart_recommendations =
           currentAnalysisData.smart_recommendations.filter((r, i) => {
             if (i === index) return false;
+            if (r.subject === rec.subject && missingItemBeforeApply.missing <= 1)
+              return false;
             if (r.day === rec.day && r.time === rec.time) return false;
             if (
               r.faculty_id === rec.faculty_id &&
@@ -1203,6 +1455,9 @@
         );
         if (missingItem) {
           missingItem.missing -= 1;
+          if (missingItem.session_breakdown) {
+            missingItem.session_breakdown = missingItem.session_breakdown.slice(1);
+          }
           if (missingItem.missing <= 0)
             currentAnalysisData.missing_breakdown =
               currentAnalysisData.missing_breakdown.filter(
@@ -1246,17 +1501,20 @@
           }, 100);
         } else {
           try {
+            const recordsForSelectedBatch = allSchedules.filter(
+              (record) => Number(record.batch_id) === batchId,
+            );
             const response = await apiFetch(`${API_URL}/save-timetable/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                records: allSchedules,
-                notes: allSchedules[0]?.notes || "",
+                records: recordsForSelectedBatch,
+                notes: recordsForSelectedBatch[0]?.notes || "",
               }),
             });
             const result = await response.json();
             if (!result.success) {
-              alert("Database Save Error: " + result.message);
+              alert("Database Save Error: " + (result.detail || result.message || "The timetable could not be saved."));
               allSchedules.pop();
               return;
             }
@@ -1287,7 +1545,7 @@
               }
             }, 100);
           } catch (e) {
-            alert("Network Error.");
+            alert("Error: Could not save the timetable. " + (e.message || "Please try again."));
             allSchedules.pop();
             return;
           }

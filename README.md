@@ -37,7 +37,22 @@ To run locally:
 
 1. Clone the repository and set up a virtual environment.
 2. Install dependencies via `pip install -r requirements.txt`.
-3. Configure your PostgreSQL database named `smartsched` and update the connection string.
+3. Configure these environment variables in a local, untracked `.env` file:
+
+   ```env
+   DATABASE_URL=postgresql://user:password@host:5432/smartsched
+   SECRET_KEY=<random value of at least 32 characters>
+   ADMIN_USERNAME=<administrator username>
+   ADMIN_PASSWORD_HASH=<bcrypt hash generated outside the source tree>
+   ALLOWED_ORIGINS=http://127.0.0.1:8000
+   ENABLE_NGROK=true
+   ```
+
+   Never use the old source-controlled/default administrator credentials. Generate
+   a new signing key and password hash for every environment.
+   Set `ENABLE_NGROK=true` only for local Telegram webhook testing. Ngrok must
+   have an authenticated local agent (`ngrok config add-authtoken ...`) and
+   should remain disabled in production.
 4. Run the server using `uvicorn main:app --reload --port 8000` and access
    `http://127.0.0.1:8000/`. If port 8000 is already in use, run
    `uvicorn main:app --reload --port 8001` and use the matching URL.

@@ -35,7 +35,6 @@
             type="password"
             id="password"
             class="w-full p-3 border-2 border-[#181919] rounded-lg"
-            value="supersecret"
             required
           />
         </div>
@@ -70,8 +69,8 @@
             const data = await response.json();
 
             if (response.ok) {
-              // SUCCESS! Save the key to browser memory
-              localStorage.setItem("access_token", data.access_token);
+              // The session token is retained for the current browser session.
+              sessionStorage.setItem("access_token", data.access_token);
               // Redirect to dashboard
               window.location.href = "index.html";
             } else {
