@@ -3475,11 +3475,205 @@ def get_global_dashboard_stats(user: dict = Depends(require_admin)):
         cursor.execute("SELECT COUNT(*) as count FROM timetables"); booked_slots = cursor.fetchone()["count"]
         utilization = round((booked_slots / total_possible_slots) * 100) if total_possible_slots > 0 else 0
 
-        cursor.execute("SELECT f.id, f.name, COUNT(t.id) as assigned_hours, f.max_weekly_hours, f.department_id FROM faculties f LEFT JOIN timetables t ON f.id = t.faculty_id GROUP BY f.id, f.name, f.max_weekly_hours, f.department_id ORDER BY assigned_hours DESC")
+        cursor.execute("""
+            SELECT f.id, f.name, COUNT(t.id) AS assigned_hours,
+                   f.max_weekly_hours, f.department_id,
+                   d.name AS department_name
+            FROM faculties f
+            JOIN departments d ON d.id = f.department_id
+            LEFT JOIN timetables t ON f.id = t.faculty_id
+            GROUP BY f.id, f.name, f.max_weekly_hours, f.department_id, d.name
+            ORDER BY assigned_hours DESC
+        """)
         faculty_load = cursor.fetchall()
+
+        # Build explainable demand/supply evidence for recommendations.
+        cursor.execute("""
+            SELECT b.id, b.name, b.department_id, COALESCE(b.semester, 1) AS semester
+            FROM batches b
+        """)
+        batches = cursor.fetchall()
+        cursor.execute("""
+            SELECT s.id, s.name, s.subject_type, s.department_id, s.semester,
+                   d.name AS department_name
+            FROM subjects s
+            JOIN departments d ON d.id = s.department_id
+        """)
+        subjects = cursor.fetchall()
+        cursor.execute("""
+            SELECT t.batch_id, t.subject_id, t.faculty_id
+            FROM timetables t
+        """)
+        timetable_rows = cursor.fetchall()
+        cursor.execute("""
+            SELECT fe.faculty_id, fe.subject_id, fe.competency_tier
+            FROM faculty_expertise fe
+        """)
+        expertise_rows = cursor.fetchall()
+
+        faculty_by_id = {f["id"]: f for f in faculty_load}
+        assigned_by_subject_batch = {}
+        assigned_by_subject = {}
+        for row in timetable_rows:
+            key = (row["batch_id"], row["subject_id"])
+            assigned_by_subject_batch[key] = assigned_by_subject_batch.get(key, 0) + 1
+            assigned_by_subject[row["subject_id"]] = assigned_by_subject.get(row["subject_id"], 0) + 1
+
+        qualified_by_subject = {}
+        for row in expertise_rows:
+            qualified_by_subject.setdefault(row["subject_id"], []).append(row["faculty_id"])
+
+        subject_by_id = {s["id"]: s for s in subjects}
+        batches_by_subject = {}
+        for batch in batches:
+            cursor.execute(
+                """
+                SELECT ss.subject_id
+                FROM semester_subjects ss
+                JOIN semesters se ON se.id = ss.semester_id
+                WHERE se.department_id = %s
+                  AND se.term_number = %s
+                """,
+                (batch["department_id"], batch["semester"]),
+            )
+            mapped_subject_ids = [r["subject_id"] for r in cursor.fetchall()]
+            if not mapped_subject_ids:
+                mapped_subject_ids = [
+                    s["id"]
+                    for s in subjects
+                    if s["department_id"] == batch["department_id"]
+                    and s["semester"] == batch["semester"]
+                ]
+            for subject_id in mapped_subject_ids:
+                if subject_id in subject_by_id:
+                    batches_by_subject.setdefault(subject_id, []).append(batch)
+
+        detailed_recommendations = []
+        for subject_id, subject_batches in batches_by_subject.items():
+            subject = subject_by_id[subject_id]
+            required = len(subject_batches) * max(1, int(subject.get("required_sessions") or 1))
+            scheduled = assigned_by_subject.get(subject_id, 0)
+            deficit = max(0, required - scheduled)
+            qualified_faculty = [
+                faculty_by_id[fid]
+                for fid in qualified_by_subject.get(subject_id, [])
+                if fid in faculty_by_id
+            ]
+            available_capacity = sum(
+                max(0, int(f["max_weekly_hours"]) - int(f["assigned_hours"]))
+                for f in qualified_faculty
+            )
+            remaining_deficit = max(0, deficit - available_capacity)
+            affected_batches = [
+                {
+                    "name": batch["name"],
+                    "missing_sessions": max(
+                        0,
+                        int(subject.get("required_sessions") or 1)
+                        - assigned_by_subject_batch.get((batch["id"], subject_id), 0),
+                    ),
+                }
+                for batch in subject_batches
+                if assigned_by_subject_batch.get((batch["id"], subject_id), 0)
+                < max(1, int(subject.get("required_sessions") or 1))
+            ]
+            if not deficit:
+                continue
+
+            if remaining_deficit:
+                confidence = 90 if not qualified_faculty else 85
+                detailed_recommendations.append({
+                    "type": "warning",
+                    "icon": "person_add",
+                    "title": "Faculty capacity shortage",
+                    "message": (
+                        f"{subject['department_name']} needs {remaining_deficit} additional "
+                        f"weekly session(s) for {subject['name']}."
+                    ),
+                    "priority": "high" if remaining_deficit >= 3 else "medium",
+                    "confidence": confidence,
+                    "department": subject["department_name"],
+                    "subject": subject["name"],
+                    "affected_batches": affected_batches,
+                    "required_sessions": required,
+                    "scheduled_sessions": scheduled,
+                    "deficit_sessions": deficit,
+                    "available_capacity": available_capacity,
+                    "qualified_faculty": [f["name"] for f in qualified_faculty],
+                    "action": (
+                        f"Hire or assign faculty with {subject['name']} expertise for "
+                        f"at least {remaining_deficit} weekly session(s)."
+                    ),
+                })
+            else:
+                detailed_recommendations.append({
+                    "type": "action",
+                    "icon": "swap_horiz",
+                    "title": "Redistribute faculty workload",
+                    "message": (
+                        f"{subject['department_name']} has {deficit} missing weekly "
+                        f"session(s) for {subject['name']}, but qualified capacity exists."
+                    ),
+                    "priority": "medium",
+                    "confidence": 80,
+                    "department": subject["department_name"],
+                    "subject": subject["name"],
+                    "affected_batches": affected_batches,
+                    "required_sessions": required,
+                    "scheduled_sessions": scheduled,
+                    "deficit_sessions": deficit,
+                    "available_capacity": available_capacity,
+                    "qualified_faculty": [f["name"] for f in qualified_faculty],
+                    "action": (
+                        f"Redistribute {deficit} session(s) to qualified faculty with "
+                        "remaining capacity before hiring."
+                    ),
+                })
         
         overworked_count = sum(1 for f in faculty_load if f["max_weekly_hours"] > 0 and (f["assigned_hours"] / f["max_weekly_hours"]) >= 0.9)
         underused_rooms_count = math.ceil(room_count * (1 - (utilization / 100))) if utilization < 60 else 0
+
+        overloaded_faculty = [
+            f for f in faculty_load
+            if f["max_weekly_hours"] > 0
+            and f["assigned_hours"] >= f["max_weekly_hours"] * 0.9
+        ]
+        for faculty in overloaded_faculty:
+            cursor.execute("""
+                SELECT DISTINCT s.name
+                FROM timetables t
+                JOIN subjects s ON s.id = t.subject_id
+                WHERE t.faculty_id = %s
+                ORDER BY s.name
+            """, (faculty["id"],))
+            faculty_subjects = [row["name"] for row in cursor.fetchall()]
+            utilization_percent = round(
+                (faculty["assigned_hours"] / faculty["max_weekly_hours"]) * 100
+            )
+            detailed_recommendations.append({
+                "type": "warning",
+                "icon": "person_alert",
+                "title": "Review faculty workload",
+                "message": (
+                    f"{faculty['name']} has {faculty['assigned_hours']} assigned "
+                    f"session(s) against a {faculty['max_weekly_hours']} session limit "
+                    f"({utilization_percent}% utilization)."
+                ),
+                "priority": "high" if utilization_percent > 100 else "medium",
+                "confidence": 100,
+                "department": faculty["department_name"],
+                "faculty": faculty["name"],
+                "assigned_sessions": faculty["assigned_hours"],
+                "maximum_sessions": faculty["max_weekly_hours"],
+                "overload_sessions": max(
+                    0, faculty["assigned_hours"] - faculty["max_weekly_hours"]
+                ),
+                "subjects": faculty_subjects,
+                "action": (
+                    "Redistribute sessions to qualified faculty with available "
+                    "capacity before assigning additional work."
+                ),
+            })
 
         cursor.execute("SELECT COUNT(*) as c FROM (SELECT b.id FROM batches b LEFT JOIN timetables t ON b.id = t.batch_id GROUP BY b.id HAVING COUNT(t.id) = 0) as sub")
         unscheduled_batches = cursor.fetchone()["c"]
@@ -3508,8 +3702,9 @@ def get_global_dashboard_stats(user: dict = Depends(require_admin)):
         elif health_score < 85 or exp_fac_shortage > 0: risk_level = "Medium"
         predictive = {"sufficient": "YES" if exp_fac_shortage == 0 and exp_room_shortage <= 0 else "NO", "faculty_shortage": exp_fac_shortage, "room_shortage": f"{exp_room_shortage} Labs/Rooms" if exp_room_shortage > 0 else "None", "next_sem_risk": risk_level}
 
-        recommendations = []
-        if exp_fac_shortage > 0: recommendations.append({"type": "warning", "icon": "person_add", "title": "Hire New Faculty", "message": f"Predictive models suggest hiring {exp_fac_shortage} new professors to maintain health next semester."})
+        recommendations = detailed_recommendations
+        if exp_fac_shortage > 0 and not overloaded_faculty:
+            recommendations.append({"type": "warning", "icon": "person_add", "title": "Faculty capacity risk", "message": f"{exp_fac_shortage} faculty member(s) are at or above 90% workload.", "priority": "medium", "confidence": 70, "action": "Review workload before the next timetable generation."})
         if exp_room_shortage > 0: recommendations.append({"type": "error", "icon": "domain_disabled", "title": "Room Shortage Predicted", "message": f"You will need {exp_room_shortage} additional rooms to comfortably house next semester's batches."})
         if unmapped_subjects > 0: recommendations.append({"type": "action", "icon": "menu_book", "title": "Map Expertise", "message": f"{unmapped_subjects} subjects are unteachable right now. Map faculty to them immediately."})
         if not recommendations: recommendations.append({"type": "success", "icon": "auto_awesome", "title": "Perfect Harmony", "message": "No predictive risks detected. Current resources are perfectly balanced."})

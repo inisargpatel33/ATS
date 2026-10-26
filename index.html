@@ -165,19 +165,11 @@
             <span class="material-symbols-outlined text-sm text-primary"
               >public</span
             >
-            <span class="font-label-md font-bold text-primary"
-              >Global Campus View</span
-            >
-          </div>
+            <span class="font-label-md text-primary">Global Campus</span>
           <div
             class="w-10 h-10 rounded-full border-2 border-primary overflow-hidden ml-2"
           >
-            <img
-              src="https://api.dicebear.com/7.x/notionists/svg?seed=Admin"
-              alt="User"
-              class="w-full h-full bg-secondary-container"
-            />
-          </div>
+                      </div>
         </div>
       </header>
 
@@ -512,11 +504,43 @@
         </div>
       </div>
     </main>
+
+    <div
+      id="recommendationsModal"
+      class="fixed inset-0 z-[100] hidden items-center justify-center bg-primary/50 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="recommendationsModalTitle"
+    >
+      <div
+        class="bg-surface hand-drawn-border offset-shadow w-full max-w-4xl max-h-[85vh] flex flex-col"
+      >
+        <div class="flex items-center justify-between gap-4 p-5 border-b-2 border-primary">
+          <div>
+            <h2 id="recommendationsModalTitle" class="font-headline-md text-2xl text-primary">
+              Detailed Suggestions
+            </h2>
+            <p id="recommendationsModalSummary" class="text-sm text-on-surface-variant mt-1"></p>
+          </div>
+          <button
+            id="closeRecommendationsModal"
+            type="button"
+            class="p-2 rounded-lg hover:bg-surface-container-high"
+            aria-label="Close detailed suggestions"
+          >
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div id="recommendationsModalContent" class="overflow-y-auto p-5 space-y-4"></div>
+      </div>
+    </div>
+
     <script src="global.js"></script>
     <script>
       const API_URL = window.location.origin.includes(":5500")
         ? "http://127.0.0.1:8000"
         : window.location.origin;
+      let dashboardRecommendations = [];
       document.addEventListener("DOMContentLoaded", async () => {
         await fetchGlobalDashboardData();
       });
@@ -618,9 +642,56 @@
 
       function renderRecommendations(recommendations) {
         const container = document.getElementById("aiRecommendationsContainer");
-        container.innerHTML = "";
+        dashboardRecommendations = Array.isArray(recommendations) ? recommendations : [];
+        if (!dashboardRecommendations.length) {
+          container.innerHTML = `
+            <div class="bg-tertiary-fixed hand-drawn-border-sm p-5 border-2 border-primary">
+              <p class="font-label-md text-primary font-bold">No recommendations</p>
+              <p class="text-sm text-on-surface-variant mt-1">Current timetable data does not show an actionable issue.</p>
+            </div>`;
+          return;
+        }
 
-        recommendations.forEach((rec) => {
+        const first = dashboardRecommendations[0];
+        const summaryTitle =
+          dashboardRecommendations.length === 1
+            ? first.title
+            : `${dashboardRecommendations.length} recommendations require review`;
+        const summaryMessage =
+          dashboardRecommendations.length === 1
+            ? first.message
+            : "The system found multiple workload, subject, batch, or resource signals. Open the detailed suggestions to review each one.";
+        const summaryType = dashboardRecommendations.some((rec) => rec.type === "error")
+          ? "error"
+          : dashboardRecommendations.some((rec) => rec.type === "warning")
+            ? "warning"
+            : "action";
+        const summaryBg =
+          summaryType === "error"
+            ? "bg-error-container text-error border-error"
+            : summaryType === "warning"
+              ? "bg-[#FFE194] text-primary border-primary"
+              : "bg-[#c8e7fb] text-primary border-primary";
+        container.innerHTML = `
+          <div class="${summaryBg} hand-drawn-border-sm p-5 border-2 flex items-center justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-outlined mt-0.5">${first.icon || "auto_awesome"}</span>
+              <div>
+                <h4 class="font-label-md font-bold leading-tight">${escapeHtml(summaryTitle)}</h4>
+                <p class="text-sm mt-1 leading-snug">${escapeHtml(summaryMessage)}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onclick="openRecommendationsModal()"
+              class="shrink-0 bg-primary text-white px-4 py-2 rounded-lg border-2 border-primary shadow-[3px_3px_0px_0px_#181919] hover:-translate-y-0.5 active:translate-y-0"
+            >
+              View All
+            </button>
+          </div>`;
+      }
+
+      function recommendationDetails(rec) {
           let bgClass = "bg-white",
             iconColor = "text-primary",
             borderClass = "border-primary";
@@ -636,16 +707,66 @@
             bgClass = "bg-[#c8e7fb]";
           }
 
-          container.innerHTML += `
+          const batches = (rec.affected_batches || [])
+            .map((batch) => `${escapeHtml(batch.name)} (${batch.missing_sessions} missing)`)
+            .join(", ");
+          const details = rec.department
+            ? `<div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-on-surface-variant">
+                <p><strong>Department:</strong> ${escapeHtml(rec.department)}</p>
+                ${rec.subject ? `<p><strong>Subject:</strong> ${escapeHtml(rec.subject)}</p>` : ""}
+                ${rec.faculty ? `<p><strong>Faculty:</strong> ${escapeHtml(rec.faculty)}</p>` : ""}
+                ${rec.scheduled_sessions !== undefined ? `<p><strong>Sessions:</strong> ${rec.scheduled_sessions}/${rec.required_sessions} scheduled</p>` : ""}
+                ${rec.deficit_sessions !== undefined ? `<p><strong>Deficit:</strong> ${rec.deficit_sessions} session(s)</p>` : ""}
+                ${rec.assigned_sessions !== undefined ? `<p><strong>Assigned / limit:</strong> ${rec.assigned_sessions}/${rec.maximum_sessions}</p>` : ""}
+                ${rec.overload_sessions !== undefined ? `<p><strong>Overload:</strong> ${rec.overload_sessions} session(s)</p>` : ""}
+                ${rec.available_capacity !== undefined ? `<p><strong>Available qualified capacity:</strong> ${rec.available_capacity}</p>` : ""}
+                <p><strong>Confidence:</strong> ${rec.confidence ?? "--"}%</p>
+                ${rec.affected_batches ? `<p class="md:col-span-2"><strong>Affected batches:</strong> ${batches || "None identified"}</p>` : ""}
+                ${rec.qualified_faculty ? `<p class="md:col-span-2"><strong>Qualified faculty:</strong> ${rec.qualified_faculty.map(escapeHtml).join(", ") || "None mapped"}</p>` : ""}
+                ${rec.subjects ? `<p class="md:col-span-2"><strong>Assigned subjects:</strong> ${rec.subjects.map(escapeHtml).join(", ") || "None"}</p>` : ""}
+                <p class="md:col-span-2"><strong>Recommended action:</strong> ${escapeHtml(rec.action || "")}</p>
+              </div>`
+            : "";
+          return `
             <div class="${bgClass} hand-drawn-border-sm p-4 flex items-start gap-3 transition-all text-left border-2 ${borderClass}">
-              <span class="material-symbols-outlined ${iconColor} mt-0.5">${rec.icon}</span>
+              <span class="material-symbols-outlined ${iconColor} mt-0.5">${escapeHtml(rec.icon || "auto_awesome")}</span>
               <div>
-                <h4 class="font-label-md text-primary font-bold leading-tight">${rec.title}</h4>
-                <p class="text-body-md text-on-surface-variant text-sm mt-1 leading-snug">${rec.message}</p>
+                <h4 class="font-label-md text-primary font-bold leading-tight">${escapeHtml(rec.title || "Recommendation")}</h4>
+                <p class="text-body-md text-on-surface-variant text-sm mt-1 leading-snug">${escapeHtml(rec.message || "")}</p>
+                ${details}
               </div>
             </div>`;
-        });
       }
+
+      window.openRecommendationsModal = function () {
+        const modal = document.getElementById("recommendationsModal");
+        document.getElementById("recommendationsModalSummary").innerText =
+          `${dashboardRecommendations.length} detailed suggestion(s) based on current data`;
+        document.getElementById("recommendationsModalContent").innerHTML =
+          dashboardRecommendations.map(recommendationDetails).join("");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      };
+
+      function closeRecommendationsModal() {
+        const modal = document.getElementById("recommendationsModal");
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      }
+
+      document
+        .getElementById("closeRecommendationsModal")
+        .addEventListener("click", closeRecommendationsModal);
+      document
+        .getElementById("recommendationsModal")
+        .addEventListener("click", (event) => {
+          if (event.target.id === "recommendationsModal") {
+            closeRecommendationsModal();
+          }
+        });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeRecommendationsModal();
+      });
     </script>
   </body>
 </html>
